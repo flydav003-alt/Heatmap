@@ -42,7 +42,30 @@ SSL_CTX = ssl._create_unverified_context()
 LISTED_PRICE_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 LISTED_REVENUE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 OTC_PRICE_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
-OTC_REVENUE_XLS_URL = "https://www.tpex.org.tw/storage/statistic/sales_revenue/en-us/O_202604.xls"
+def _find_otc_revenue_url() -> str:
+    """
+    OTC 月報 URL 格式：O_YYYYMM.xls
+    每月約 10 日後才有上月資料，因此最多往前查 2 個月。
+    """
+    now = datetime.now()
+    for months_back in range(3):
+        year, month = now.year, now.month - months_back
+        while month <= 0:
+            month += 12
+            year -= 1
+        ym = f"{year}{month:02d}"
+        url = f"https://www.tpex.org.tw/storage/statistic/sales_revenue/en-us/O_{ym}.xls"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA}, method="HEAD")
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=10) as resp:
+                if resp.status == 200:
+                    print(f"OTC revenue URL → {url}")
+                    return url
+        except Exception:
+            continue
+    # fallback: 用當月，不管存不存在，讓後面的 fetch 報錯
+    ym = now.strftime("%Y%m")
+    return f"https://www.tpex.org.tw/storage/statistic/sales_revenue/en-us/O_{ym}.xls"
 OTC_CAP_URL = "https://www.tpex.org.tw/www/en-us/company/rankCap"
 OTC_EPS_URL = "https://www.tpex.org.tw/www/en-us/company/rankEPS"
 LISTED_FIN_URL = "https://www.twse.com.tw/rwd/zh/IIH/company/financial?code={code}"
@@ -279,7 +302,7 @@ def load_otc_prices() -> tuple[dict[str, dict[str, Any]], str]:
 
 
 def load_otc_revenue() -> tuple[dict[str, dict[str, Any]], set[str], str]:
-    raw = fetch_bytes(OTC_REVENUE_XLS_URL)
+    raw = fetch_bytes(_find_otc_revenue_url())
     fd, path = tempfile.mkstemp(suffix=".xls")
     os.close(fd)
     Path(path).write_bytes(raw)
