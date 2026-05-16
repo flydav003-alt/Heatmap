@@ -1,21 +1,8 @@
-# Secrets
 .streamlit/secrets.toml
-
-# Local xlrd vendor (optional offline install)
 .vendor_py/
-
-# Python cache
 __pycache__/
 docs/__pycache__/
-*.pyc
-*.pyo
-
-# Build script cache (stock financial data)
 docs/.cache_sem_ai/
-
-# pytest
-.pytest_cache/
-
-# OS
+*.pyc
 .DS_Store
-Thumbs.db
+.pytest_cache/
