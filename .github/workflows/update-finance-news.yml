@@ -1,9 +1,9 @@
 name: Update Static Heatmap Data
 
 on:
-  workflow_dispatch:           # 手動觸發
+  workflow_dispatch:
   schedule:
-    # UTC 01:00–05:00 每 15 分鐘（台灣時間 09:00–13:00）
+    # UTC 01:00–05:00 每 15 分鐘 = 台灣時間 09:00–13:00，交易日
     - cron: "*/15 1-5 * * 1-5"
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install xlrd
 
-      - name: Build static heatmap artifacts
+      - name: Build static heatmap
         env:
           PYTHONUTF8: "1"
         run: |
@@ -37,6 +37,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/index.html docs/representative_chain_data.json
-          # 只有真的有變更才 commit，避免空 commit 錯誤
           git diff --cached --quiet || git commit -m "chore: update static heatmap [skip ci]"
           git push
