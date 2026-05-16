@@ -61,31 +61,17 @@
     .group-chip { border-radius:10px; padding:7px 10px; background:rgba(255,255,255,.05); font-weight:900; }
     .group-count { color:var(--muted); font-size:13px; }
     .table-wrap { overflow:auto; }
-    table { width:100%; min-width:1080px; border-collapse:collapse; table-layout:fixed; }
-    thead th { background:rgba(8,17,31,.88); color:var(--muted); text-align:left; padding:10px 8px; font-size:12px; white-space:nowrap; border-bottom:1px solid rgba(23,48,74,.9); }
+    table { width:100%; min-width:960px; border-collapse:collapse; }
+    thead th { background:rgba(8,17,31,.88); color:var(--muted); text-align:left; padding:11px 9px; font-size:12px; white-space:nowrap; border-bottom:1px solid rgba(23,48,74,.9); }
     thead th.sortable { cursor:pointer; }
-    tbody td { padding:10px 8px; border-bottom:1px solid rgba(23,48,74,.66); font-size:13px; vertical-align:middle; }
+    tbody td { padding:11px 9px; border-bottom:1px solid rgba(23,48,74,.66); font-size:13px; vertical-align:middle; }
     tbody tr:hover { background:rgba(14,31,49,.45); }
-    thead th:nth-child(1), tbody td:nth-child(1) { width:68px; }
-    thead th:nth-child(2), tbody td:nth-child(2) { width:118px; }
-    thead th:nth-child(3), tbody td:nth-child(3) { width:154px; }
-    thead th:nth-child(4), tbody td:nth-child(4) { width:100px; }
-    thead th:nth-child(5), tbody td:nth-child(5) { width:96px; }
-    thead th:nth-child(6), tbody td:nth-child(6) { width:102px; }
-    thead th:nth-child(7), tbody td:nth-child(7) { width:92px; }
-    thead th:nth-child(8), tbody td:nth-child(8) { width:78px; }
-    thead th:nth-child(9), tbody td:nth-child(9) { width:116px; }
-    thead th:nth-child(10), tbody td:nth-child(10) { width:116px; }
-    .code-cell { width:68px; white-space:nowrap; }
-    .code { display:inline-block; color:var(--cyan); font-size:14px; font-weight:900; line-height:1.05; }
-    .market { display:inline-block; margin-left:4px; color:var(--muted); font-size:10px; }
-    .name-cell { width:118px; }
-    .name { font-size:15px; font-weight:800; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .role-tag {
-      display:inline-flex; align-items:center; max-width:142px; padding:4px 8px; border-radius:10px;
-      border:1px solid rgba(68,199,255,.16); background:rgba(16,28,49,.88); color:#88aee3;
-      font-size:12px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    }
+    .code-cell { width:66px; }
+    .code { display:block; color:var(--cyan); font-size:15px; font-weight:900; line-height:1.1; }
+    .market { display:block; margin-top:3px; color:var(--muted); font-size:11px; }
+    .name-cell { width:96px; }
+    .name { font-size:15px; font-weight:800; line-height:1.15; }
+    .role-tag { display:inline-flex; max-width:138px; padding:6px 8px; border-radius:10px; border:1px solid rgba(68,199,255,.16); background:rgba(16,28,49,.88); color:#88aee3; font-size:12px; line-height:1.2; }
     td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:14px; }
     .up { color:var(--up); } .down { color:var(--down); } .flat { color:var(--flat); } .na { color:#7a8ea9; }
     .footnote { margin-top:14px; color:var(--muted); font-size:12px; line-height:1.65; }
@@ -102,10 +88,10 @@
       </div>
       <div class="kpis">
         <div class="kpi"><div class="label">收錄檔數</div><div class="value">266</div></div>
-        <div class="kpi"><div class="label">總資本額</div><div class="value">14,406億</div></div>
+        <div class="kpi"><div class="label">總資本額</div><div class="value">14,376億</div></div>
         <div class="kpi"><div class="label">平均漲跌幅</div><div class="value down">-2.47%</div></div>
         <div class="kpi"><div class="label">總成交量</div><div class="value">3,680,295張</div></div>
-        <div class="kpi"><div class="label">更新</div><div class="value" style="font-size:14px">14:46:54</div></div>
+        <div class="kpi"><div class="label">更新</div><div class="value" style="font-size:14px">09:29:12</div></div>
       </div>
     </section>
     <div class="top-pills">
@@ -818,16 +804,16 @@
             
             <tr data-code="6719" data-name="力智" data-group="晶圓代工 / 功率半導體"
                 data-price="200.0" data-change="-4.07673860911271"
-                data-volume="1430256.0" data-capital="10.5467989"
-                data-eps="2.1" data-yoy="-12.135337690431895" data-mom="9.267965652012666">
+                data-volume="1430256.0" data-capital=""
+                data-eps="" data-yoy="-12.135337690431895" data-mom="9.267965652012666">
               <td class="code-cell"><span class="code">6719</span><span class="market">上市</span></td>
               <td class="name-cell"><div class="name">力智</div></td>
               <td><span class="role-tag">晶圓代工 / 功率半導體</span></td>
               <td class="num">200.00</td>
               <td class="num down">-4.08%</td>
               <td class="num">1,430</td>
-              <td class="num">10.5</td>
-              <td class="num">2.10</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
               <td class="num down">-12.14%</td>
               <td class="num up">+9.27%</td>
             </tr>
@@ -2930,16 +2916,16 @@
             
             <tr data-code="3665" data-name="貿聯-KY" data-group="高速互連 / 連接器 / 線材"
                 data-price="2095.0" data-change="-6.888888888888889"
-                data-volume="10273858.0" data-capital="19.5078405"
-                data-eps="11.66" data-yoy="18.54291992756683" data-mom="5.264827560247835">
+                data-volume="10273858.0" data-capital=""
+                data-eps="" data-yoy="18.54291992756683" data-mom="5.264827560247835">
               <td class="code-cell"><span class="code">3665</span><span class="market">上市</span></td>
               <td class="name-cell"><div class="name">貿聯-KY</div></td>
               <td><span class="role-tag">高速互連 / 連接器 / 線材</span></td>
               <td class="num">2,095.00</td>
               <td class="num down">-6.89%</td>
               <td class="num">10,274</td>
-              <td class="num">19.5</td>
-              <td class="num">11.66</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
               <td class="num up">+18.54%</td>
               <td class="num up">+5.26%</td>
             </tr>
