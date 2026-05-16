@@ -48,10 +48,15 @@ OTC_EPS_URL        = "https://www.tpex.org.tw/www/en-us/company/rankEPS"
 LISTED_FIN_URL     = "https://www.twse.com.tw/rwd/zh/IIH/company/financial?code={code}"
 
 
-def _find_otc_revenue_url() -> str:
-    """OTC 月報 URL 格式：O_YYYYMM.xls。每月約 10 日才有上月資料，最多往前查 3 個月。"""
+def _find_otc_revenue_url() -> str | None:
+    """
+    OTC 月報 URL 格式：O_YYYYMM.xls，最多往前查 4 個月。
+    伺服器對不存在的月份仍回 HTTP 200 但內容是 HTML 錯誤頁，
+    因此必須實際下載並驗證前 8 bytes 是 XLS magic。
+    """
+    XLS_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
     now = datetime.now()
-    for months_back in range(3):
+    for months_back in range(4):
         year, month = now.year, now.month - months_back
         while month <= 0:
             month += 12
@@ -59,15 +64,16 @@ def _find_otc_revenue_url() -> str:
         ym  = f"{year}{month:02d}"
         url = f"https://www.tpex.org.tw/storage/statistic/sales_revenue/en-us/O_{ym}.xls"
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA}, method="HEAD")
-            with urllib.request.urlopen(req, context=SSL_CTX, timeout=10) as resp:
-                if resp.status == 200:
-                    print(f"OTC revenue → {url}")
-                    return url
-        except Exception:
-            continue
-    ym = now.strftime("%Y%m")
-    return f"https://www.tpex.org.tw/storage/statistic/sales_revenue/en-us/O_{ym}.xls"
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=30) as resp:
+                header = resp.read(8)
+            if header == XLS_MAGIC:
+                print(f"OTC revenue → {url}")
+                return url
+            print(f"OTC revenue {ym}: not a real XLS ({header[:8]!r}), skipping")
+        except Exception as exc:
+            print(f"OTC revenue {ym}: error ({exc}), skipping")
+    return None
 
 
 # ── Static config (100% original) ─────────────────────────────────────────────
@@ -307,7 +313,12 @@ def load_otc_prices() -> tuple[dict[str, dict[str, Any]], str]:
 
 
 def load_otc_revenue() -> tuple[dict[str, dict[str, Any]], set[str], str]:
-    raw = fetch_bytes(_find_otc_revenue_url())
+    """OTC 月營收。若找不到有效 XLS，回傳空資料（不中止 build）。"""
+    url = _find_otc_revenue_url()
+    if url is None:
+        print("OTC revenue: no valid XLS found, skipping (revenue/YoY/MoM will be empty for OTC stocks)")
+        return {}, set(), ""
+    raw = fetch_bytes(url)
     fd, path = tempfile.mkstemp(suffix=".xls")
     os.close(fd)
     Path(path).write_bytes(raw)
