@@ -1,6 +1,2 @@
-# Streamlit app (streamlit_app.py) dependencies
 streamlit>=1.45,<2
-
-# Build script (docs/build_semiconductor_ai_chain.py) dependency
-# Also needed when Streamlit Cloud pre-installs packages
 xlrd>=2.0.2,<3
