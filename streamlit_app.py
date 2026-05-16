@@ -281,7 +281,11 @@ def inject_live_script(base_html: str, payload: dict[str, Any]) -> str:
         '<div id="vol-leaderboard"><div style="color:#3d5470;font-size:12px;padding:8px">載入中…</div></div>'
         "</div>"
     )
-    return base_html.replace("</body>", vol_html + script + "</body>")
+    # 把 vol_html 插在 <main id="groupList"> 前面（toolbar 和股票列表之間）
+    # script 插在 </body> 前（需要等 DOM 完整才能讀 tr[data-code]）
+    out = base_html.replace('<main id="groupList">', vol_html + '<main id="groupList">', 1)
+    out = out.replace("</body>", script + "</body>", 1)
+    return out
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
