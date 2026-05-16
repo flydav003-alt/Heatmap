@@ -16,6 +16,7 @@ import streamlit.components.v1 as components
 
 
 ROOT = Path(__file__).resolve().parent
+# docs/index.html は build_semiconductor_ai_chain.py が生成する静的 HTML
 HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 BATCH_SIZE = 90
@@ -122,6 +123,21 @@ def fetch_twse_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         "requested_count": len(items),
         "errors": errors,
     }
+
+
+def estimate_page_height(base_html: str) -> int:
+    """
+    Dynamically estimate the page height to avoid iframe clipping.
+    components.html() renders in an iframe — if height is too small
+    the content is cut off, which looks like an 'embedded' fragment.
+    """
+    num_rows = base_html.count('data-code="')
+    num_groups = base_html.count('class="group-card"')
+    # hero + pills + stage-heatmap + toolbar + footnote ≈ 900 px
+    # each group card header ≈ 260 px
+    # each stock row ≈ 54 px
+    estimated = 900 + num_groups * 260 + num_rows * 54
+    return max(5000, estimated)
 
 
 def inject_live_script(base_html: str, payload: dict[str, Any]) -> str:
@@ -250,15 +266,35 @@ def main() -> None:
         initial_sidebar_state="collapsed",
     )
 
+    # ── 確認靜態 HTML 存在 ──────────────────────────────────────────────
+    if not HTML_PATH.exists():
+        st.error(
+            f"找不到 `{HTML_PATH}`。\n\n"
+            "請先在本機執行 `python docs/build_semiconductor_ai_chain.py` "
+            "產生靜態檔案，或等 GitHub Actions 自動更新後再重新啟動。"
+        )
+        st.stop()
+
     html_content = HTML_PATH.read_text(encoding="utf-8")
     symbols = tuple((item["code"], item["exchange"]) for item in extract_symbols(html_content))
 
-    payload = fetch_twse_quotes(symbols)
+    if not symbols:
+        st.error("HTML 裡沒有找到任何 data-code 股票代號，靜態檔案可能有問題，請重新執行 build 腳本。")
+        st.stop()
+
+    # ── 抓即時報價 ─────────────────────────────────────────────────────
+    with st.spinner(f"正在抓取 {len(symbols)} 檔即時報價…"):
+        payload = fetch_twse_quotes(symbols)
+
     if payload["fetched_count"] == 0:
-        st.error("TWSE MIS 即時資料沒有抓到任何股票，請稍後再重新整理。")
+        st.warning(
+            "TWSE MIS 即時資料沒有抓到任何股票（非交易時間或 API 暫時無法使用）。\n"
+            "畫面將顯示靜態快照資料。"
+        )
         if payload["errors"]:
-            st.caption(payload["errors"][0])
-        return
+            with st.expander("錯誤詳情"):
+                for err in payload["errors"]:
+                    st.caption(err)
 
     html_content = inject_live_script(html_content, payload)
 
@@ -272,7 +308,10 @@ def main() -> None:
         """,
         unsafe_allow_html=True,
     )
-    components.html(html_content, height=4200, scrolling=True)
+
+    # ── 動態計算高度，避免 iframe 被截斷看起來像「嵌入式碎片」──────────
+    page_height = estimate_page_height(html_content)
+    components.html(html_content, height=page_height, scrolling=True)
 
 
 if __name__ == "__main__":
