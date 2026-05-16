@@ -261,43 +261,27 @@ def inject_live_script(base_html: str, payload: dict[str, Any]) -> str:
 }})();
 </script>
 """
-    vol_html = """
-<style>
-  .vol-strip {{
-    padding: 0 18px 10px;
-  }}
-  .vol-label {{
-    font-size: 10px; font-weight: 700; letter-spacing: .14em;
-    text-transform: uppercase; color: #22d3ee;
-    margin-bottom: 8px;
-  }}
-  #vol-leaderboard {{
-    display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;
-    scrollbar-width: thin; scrollbar-color: #3d5470 transparent;
-  }}
-  #vol-leaderboard::-webkit-scrollbar {{ height: 4px; }}
-  #vol-leaderboard::-webkit-scrollbar-thumb {{ background: #3d5470; border-radius: 2px; }}
-  .vol-card {{
-    flex: 0 0 112px;
-    background: #070d1a;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-top: 2px solid #22d3ee;
-    border-radius: 10px;
-    padding: 10px 11px 9px;
-    min-width: 0;
-  }}
-  .vol-top {{ display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }}
-  .vol-code {{ font-family: 'IBM Plex Mono',monospace; font-size: 13px; font-weight: 600; color: #22d3ee; }}
-  .vol-chg  {{ font-family: 'IBM Plex Mono',monospace; font-size: 11px; font-weight: 600; }}
-  .vol-name {{ font-size: 12px; font-weight: 600; margin: 5px 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-  .vol-vol  {{ font-size: 11px; color: #7a9bbb; }}
-</style>
-<div class="vol-strip">
-  <div class="vol-label">🔥 成交量排行</div>
-  <div id="vol-leaderboard"><div style="color:#3d5470;font-size:12px;padding:8px">載入中…</div></div>
-</div>
-"""
-    return base_html.replace("</body>", f"{vol_html}{script}</body>")
+    # vol_html is a plain string (no f-string), so CSS braces are literal { }
+    vol_html = (
+        "<style>"
+        ".vol-strip{padding:0 18px 12px}"
+        ".vol-label{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#22d3ee;margin-bottom:9px}"
+        "#vol-leaderboard{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin;scrollbar-color:#3d5470 transparent}"
+        "#vol-leaderboard::-webkit-scrollbar{height:4px}"
+        "#vol-leaderboard::-webkit-scrollbar-thumb{background:#3d5470;border-radius:2px}"
+        ".vol-card{flex:0 0 116px;background:#070d1a;border:1px solid rgba(255,255,255,0.07);border-top:2px solid #22d3ee;border-radius:10px;padding:10px 12px 9px;min-width:0}"
+        ".vol-top{display:flex;justify-content:space-between;align-items:baseline;gap:4px}"
+        ".vol-code{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:#22d3ee}"
+        ".vol-chg{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600}"
+        ".vol-name{font-size:12px;font-weight:600;margin:5px 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+        ".vol-vol{font-size:11px;color:#7a9bbb}"
+        "</style>"
+        '<div class="vol-strip">'
+        '<div class="vol-label">🔥 成交量排行</div>'
+        '<div id="vol-leaderboard"><div style="color:#3d5470;font-size:12px;padding:8px">載入中…</div></div>'
+        "</div>"
+    )
+    return base_html.replace("</body>", vol_html + script + "</body>")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -312,17 +296,19 @@ def main() -> None:
     st.markdown(
         """
         <style>
-          /* 隱藏 Streamlit 頂部 header（白色空白的來源）*/
-          [data-testid="stHeader"]        { display: none !important; }
-          [data-testid="stToolbar"]       { display: none !important; }
-          [data-testid="stDecoration"]    { display: none !important; }
-          [data-testid="stSidebar"]       { display: none !important; }
-          #MainMenu                       { display: none !important; }
-          footer                          { display: none !important; }
-          .block-container                { padding: 0 !important; max-width: 100% !important; }
-          .stApp > header                 { display: none !important; }
-          /* iframe 撐滿，無 border/margin */
-          iframe { display: block !important; border: none !important; margin: 0 !important; }
+          [data-testid="stHeader"]           { display: none !important; }
+          [data-testid="stToolbar"]          { display: none !important; }
+          [data-testid="stDecoration"]       { display: none !important; }
+          [data-testid="stSidebar"]          { display: none !important; }
+          [data-testid="stAppViewContainer"] { padding: 0 !important; }
+          [data-testid="stVerticalBlock"]    { gap: 0 !important; padding: 0 !important; }
+          [data-testid="element-container"]  { padding: 0 !important; margin: 0 !important; }
+          #MainMenu                          { display: none !important; }
+          footer                             { display: none !important; }
+          .block-container                   { padding: 0 !important; max-width: 100% !important; }
+          .stApp > header                    { display: none !important; }
+          .stApp                             { overflow: hidden; }
+          iframe                             { display: block !important; border: none !important; margin: 0 !important; }
         </style>
         """,
         unsafe_allow_html=True,
