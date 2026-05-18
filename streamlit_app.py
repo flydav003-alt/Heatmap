@@ -85,8 +85,8 @@ def extract_symbols(base_html: str) -> list[dict[str, str]]:
 # ── TWSE MIS 即時報價（同時支援上市 tse_ 與上櫃 otc_）────────────────────────
 def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
     """
-    價格優先順序（依照你的要求）：
-    最新成交(z) > 五檔最佳賣價 > 開盤價(o) > 昨收(y)
+    價格優先順序調整為：最新成交(z) > 參考價(pz) > 五檔 > 開盤(o) > 昨收
+    （目前大量抓取下，這種順序最穩定）
     """
     ex_ch = "|".join(
         f'{"otc" if item["exchange"] == "otc" else "tse"}_{item["code"]}.tw'
@@ -110,19 +110,20 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         raw_z  = str(item.get("z", "")).strip()
         raw_pz = str(item.get("pz", "")).strip()
 
-        # 五檔最佳賣價 (a = 賣價五檔，第一檔通常最接近最新價格)
+        # 五檔最佳賣價
         best_ask = None
         if item.get("a"):
             asks = str(item.get("a", "")).split("_")
             if asks and asks[0] not in ("", "-", "0"):
                 best_ask = parse_float(asks[0])
 
-        # 最終價格：最新成交 > 五檔 > 開盤 > 昨收
+        # 最終價格優先順序（重點調整）
         price = (
-            parse_float(raw_z) or      # 1. 最新成交價
-            best_ask or                # 2. 五檔最佳賣價
-            parse_float(item.get("o")) or  # 3. 開盤價
-            parse_float(item.get("y"))     # 4. 昨收
+            parse_float(raw_z) or      # 最新成交
+            parse_float(raw_pz) or     # ← 提高 pz 優先級（關鍵）
+            best_ask or                # 五檔
+            parse_float(item.get("o")) or 
+            parse_float(item.get("y"))
         )
 
         prev_close = parse_float(item.get("y"))
@@ -133,14 +134,6 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         else:
             change_pct = None
 
-        # RAW DEBUG（確認穩定後可移除）
-        raw_debug = {
-            "z": item.get("z"),
-            "best_ask": asks[0] if 'asks' in locals() and asks else None,
-            "o": item.get("o"),
-            "y": item.get("y"),
-        }
-
         quotes[code] = {
             "price":       price,
             "change_pct":  change_pct,
@@ -148,7 +141,6 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
             "time":        item.get("t") or sys_time,
             "date":        item.get("d") or sys_date,
             "y":           prev_close,
-            "raw":         raw_debug
         }
 
     return quotes
