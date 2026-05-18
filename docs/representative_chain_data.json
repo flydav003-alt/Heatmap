@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-05-18 08:28:02",
+  "updated_at": "2026-05-18 13:51:56",
   "latest_price_date": "2026-05-18",
   "themes": {
     "ASIC": {
       "avg_change_pct": -4.0562,
-      "volume_lots": 29791.97,
+      "volume_lots": 29794.97,
       "stocks": [
         {
           "code": "2454",
@@ -32,7 +32,7 @@
           "name": "信驊",
           "price": 16150.0,
           "change_pct": -6.077348066298343,
-          "volume_lots": 535.95
+          "volume_lots": 538.95
         },
         {
           "code": "6643",
@@ -86,7 +86,7 @@
     },
     "HBM": {
       "avg_change_pct": -1.6159,
-      "volume_lots": 319938.55,
+      "volume_lots": 320098.55,
       "stocks": [
         {
           "code": "2337",
@@ -107,7 +107,7 @@
           "name": "群聯",
           "price": 2735.0,
           "change_pct": 3.207547169811321,
-          "volume_lots": 8482.24
+          "volume_lots": 8642.24
         },
         {
           "code": "3260",
