@@ -479,9 +479,7 @@ def main() -> None:
     with st.spinner(f"正在抓取 {len(symbols)} 檔即時報價…"):
         payload = fetch_all_quotes(symbols)
 
-# ==================== 正式版建議只留這些 ====================
-    st.caption(f"✅ 已抓取 {payload['fetched_count']} / {payload['requested_count']} 檔")
-    st.caption(f"最新時間：{payload['latest_date']} {payload['latest_time']}")
+
 
     if payload["fetched_count"] == 0:
         st.warning(
