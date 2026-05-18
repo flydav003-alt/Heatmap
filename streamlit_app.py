@@ -21,7 +21,7 @@ HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 120   # TWSE MIS 單次可吃 150+ 沒問題，保守用 120
+BATCH_SIZE  = 40   # TWSE MIS 單次可吃 150+ 沒問題，保守用 120
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -42,7 +42,7 @@ def parse_float(value: Any) -> float | None:
 
 
 def safe_request(url: str) -> Any:
-    """帶 retry + 正確 headers 的請求，最多重試 MAX_RETRIES 次。"""
+    """加強版：加入隨機延遲 + 更長等待，避免被 TWSE 擋"""
     for attempt in range(MAX_RETRIES):
         try:
             req = urllib.request.Request(
@@ -54,9 +54,11 @@ def safe_request(url: str) -> Any:
                     "Origin": "https://mis.twse.com.tw",
                 },
             )
-            with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
+            with urllib.request.urlopen(req, timeout=25, context=SSL_CONTEXT) as resp:
                 return json.loads(resp.read().decode("utf-8-sig"))
         except Exception as exc:
+            wait = 1.8 * (attempt + 1) + random.uniform(0.5, 1.5)
+            time.sleep(wait)
             if attempt == MAX_RETRIES - 1:
                 raise
             time.sleep(0.8 * (attempt + 1))
@@ -185,7 +187,7 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
 
 
 # ── 整合兩市場 ─────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=8, show_spinner=False)
+# @st.cache_data(ttl=10, show_spinner=False) # 先註解掉
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     # 全部股票（TSE + OTC）統一丟進 TWSE MIS，OTC 用 otc_ prefix
     all_items = [{"code": c, "exchange": e} for c, e in symbols]
@@ -195,12 +197,15 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     errors: list[str] = []
 
     # 主力：TWSE MIS 批次（TSE + OTC 混批）
+# 主力：TWSE MIS 批次（TSE + OTC 混批）
     for i in range(0, len(all_items), BATCH_SIZE):
         try:
-            quotes.update(fetch_twse_batch(all_items[i : i + BATCH_SIZE]))
+            batch_data = fetch_twse_batch(all_items[i : i + BATCH_SIZE])
+            quotes.update(batch_data)
         except Exception as exc:
             errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
-        time.sleep(0.3)
+        
+        time.sleep(1.5)   # 增加等待時間，避免被 TWSE 阻擋
 
     # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
     missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
