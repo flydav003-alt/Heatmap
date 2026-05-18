@@ -466,6 +466,20 @@ def main() -> None:
 
     with st.spinner(f"正在抓取 {len(symbols)} 檔即時報價…"):
         payload = fetch_all_quotes(symbols)
+            # ==================== DEBUG 測試區 ====================
+    st.subheader("🔍 即時資料 Debug（請截圖給我）")
+    
+    if payload["errors"]:
+        st.error("抓取錯誤：" + " | ".join(payload["errors"]))
+    
+    st.caption(f"總共請求 {payload['requested_count']} 檔 | 成功抓到 {payload['fetched_count']} 檔")
+    st.caption(f"最新時間：{payload['latest_date']} {payload['latest_time']}")
+
+    # 顯示前 10 檔的實際資料
+    sample = list(payload["quotes"].items())[:10]
+    for code, q in sample:
+        st.write(f"**{code}** → 價格: `{q.get('price')}` | 漲跌幅: `{q.get('change_pct')}` | 量: `{q.get('volume_lots')}` | 時間: `{q.get('time')}`")
+    # ====================================================
 
     if payload["fetched_count"] == 0:
         st.warning(
