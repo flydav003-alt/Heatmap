@@ -22,7 +22,7 @@ HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 30
+BATCH_SIZE  = 45
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -194,7 +194,7 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
 
 
 # ── 整合兩市場 ─────────────────────────────────────────────────────────────────
-# @st.cache_data(ttl=10, show_spinner=False)  # 先註解掉，debug 完再開
+@st.cache_data(ttl=12, show_spinner=False)  # 先註解掉，debug 完再開
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     all_items = [{"code": c, "exchange": e} for c, e in symbols]
     otc_codes = [c for c, e in symbols if e == "otc"]
@@ -211,7 +211,7 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
             st.caption(f"❌ Batch {i // BATCH_SIZE + 1} 失敗：{exc}")
-        time.sleep(2.8)
+        time.sleep(2.0)
 
     # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
     missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
@@ -479,35 +479,9 @@ def main() -> None:
     with st.spinner(f"正在抓取 {len(symbols)} 檔即時報價…"):
         payload = fetch_all_quotes(symbols)
 
-    # ── DEBUG 測試區（確認資料正常後可整段移除）────────────────────────────
-    st.subheader("🔍 即時資料 Debug（確認正常後可移除）")
-
-    if payload["errors"]:
-        st.error("抓取錯誤：" + " | ".join(payload["errors"]))
-
-    st.caption(
-        f"總共請求 {payload['requested_count']} 檔 "
-        f"| 成功抓到 {payload['fetched_count']} 檔 "
-        f"| 最新時間：{payload['latest_date']} {payload['latest_time']}"
-    )
-
-    sample = list(payload["quotes"].items())[:10]
-    for code, q in sample:
-        st.write(
-            f"**{code}** → 價格: `{q.get('price')}` "
-            f"| 漲跌幅: `{q.get('change_pct')}` "
-            f"| 量: `{q.get('volume_lots')}` "
-            f"| 時間: `{q.get('time')}`"
-        )
-        if "raw" in q:
-            raw = q["raw"]
-            st.caption(
-                f"   Raw → z: {raw.get('z')}  "
-                f"pz: {raw.get('pz')}  "
-                f"o: {raw.get('o')}  "
-                f"y: {raw.get('y')}"
-            )
-    # ── DEBUG 結束 ──────────────────────────────────────────────────────────
+# ==================== 正式版建議只留這些 ====================
+    st.caption(f"✅ 已抓取 {payload['fetched_count']} / {payload['requested_count']} 檔")
+    st.caption(f"最新時間：{payload['latest_date']} {payload['latest_time']}")
 
     if payload["fetched_count"] == 0:
         st.warning(
