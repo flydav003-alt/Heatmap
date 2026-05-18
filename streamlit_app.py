@@ -4,8 +4,11 @@ import html
 import json
 import re
 import ssl
+import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -13,12 +16,53 @@ import streamlit.components.v1 as components
 
 ROOT      = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "docs" / "index.html"
+
+# ── API endpoints ──────────────────────────────────────────────────────────────
+TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
+
+BATCH_SIZE  = 120   # TWSE MIS 單次可吃 150+ 沒問題，保守用 120
 SSL_CONTEXT = ssl._create_unverified_context()
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36"
+)
+
+MAX_RETRIES = 3
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+def parse_float(value: Any) -> float | None:
+    if value in (None, "", "-", "--", "---", "----", "N/A"):
+        return None
+    try:
+        return float(str(value).replace(",", "").strip())
+    except ValueError:
+        return None
+
+
+def safe_request(url: str) -> Any:
+    """帶 retry + 正確 headers 的請求，最多重試 MAX_RETRIES 次。"""
+    for attempt in range(MAX_RETRIES):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": UA,
+                    "Accept": "application/json,*/*",
+                    "Referer": "https://mis.twse.com.tw/stock/index.jsp",
+                    "Origin": "https://mis.twse.com.tw",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
+                return json.loads(resp.read().decode("utf-8-sig"))
+        except Exception as exc:
+            if attempt == MAX_RETRIES - 1:
+                raise
+            time.sleep(0.8 * (attempt + 1))
+
+
 def extract_symbols(base_html: str) -> list[dict[str, str]]:
-    """掃描靜態 HTML 裡的 data-code 屬性，取出代號與市場。"""
     pattern = re.compile(
         r'<tr data-code="(?P<code>\d{4})"[\s\S]*?'
         r'class="mkt-badge">(?P<market>.*?)</span>',
@@ -37,32 +81,175 @@ def extract_symbols(base_html: str) -> list[dict[str, str]]:
     return symbols
 
 
+# ── TWSE MIS 即時報價（同時支援上市 tse_ 與上櫃 otc_）──────────────────────────
+def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
+    """
+    TWSE MIS 回傳欄位：
+      z  = 即時成交價（盤前/盤後為 "-"）
+      y  = 昨收
+      pz = 參考收盤（z="-" 時的 fallback，但此時不計 change_pct）
+      v  = 成交量（單位：張）
+    支援上市 (tse_XXXX.tw) 與上櫃 (otc_XXXX.tw) 混批查詢。
+    """
+    ex_ch = "|".join(
+        f'{"otc" if item["exchange"] == "otc" else "tse"}_{item["code"]}.tw'
+        for item in batch
+    )
+    query = urllib.parse.urlencode(
+        {"ex_ch": ex_ch, "json": "1", "delay": "0", "_": str(int(time.time() * 1000))},
+        safe="|_.",
+    )
+    data = safe_request(f"{TWSE_MIS_URL}?{query}")
+
+    quotes: dict[str, dict[str, Any]] = {}
+    sys_time = (data.get("queryTime") or {}).get("sysTime", "")
+    sys_date = (data.get("queryTime") or {}).get("sysDate", "")
+
+    for item in data.get("msgArray", []):
+        code = str(item.get("c", "")).strip()
+        if not code:
+            continue
+
+        raw_z      = str(item.get("z", "")).strip()
+        price      = parse_float(raw_z)
+        prev_close = parse_float(item.get("y"))
+        volume     = parse_float(item.get("v"))   # 張
+
+        # 盤中有真實成交 → 計算漲跌幅；否則 None（不要用 0 污染平均）
+        if price is not None and prev_close not in (None, 0.0):
+            change_pct: float | None = (price / prev_close - 1) * 100
+        else:
+            # z="-" 時 price=None；fallback 到 pz 只用於顯示股價，不算漲跌
+            price      = parse_float(item.get("pz")) or prev_close
+            change_pct = None
+
+        quotes[code] = {
+            "price":       price,
+            "change_pct":  change_pct,
+            "volume_lots": volume,
+            "time": item.get("t") or sys_time,
+            "date": item.get("d") or sys_date,
+        }
+    return quotes
+
+
+# ── TPEx 上櫃即時報價（作為 TWSE MIS OTC 的備援 fallback）─────────────────────
+def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
+    """
+    使用 TPEx OpenAPI 抓上櫃報價。
+    僅在 TWSE MIS 的 otc_ 查詢缺漏時當備援，不作為主要來源。
+    """
+    if not otc_codes:
+        return {}
+    try:
+        req = urllib.request.Request(
+            TPEX_MIS_URL,
+            headers={
+                "User-Agent": UA,
+                "Accept": "application/json",
+                "Referer": "https://www.tpex.org.tw/",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
+            rows = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return {}
+
+    need = set(otc_codes)
+    quotes: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        code = str(row.get("SecuritiesCompanyCode", "")).strip()
+        if code not in need:
+            continue
+        close  = parse_float(row.get("Close"))
+        prev   = parse_float(row.get("PreviousClose") or row.get("Yesterday"))
+        change = parse_float(row.get("Change"))        # 漲跌點數
+        volume = parse_float(row.get("Volume"))        # 千股 = 張
+
+        if close is not None and prev not in (None, 0.0) and change is not None:
+            change_pct: float | None = change / prev * 100
+        elif close is not None and prev not in (None, 0.0):
+            change_pct = (close / prev - 1) * 100
+        else:
+            change_pct = None
+
+        quotes[code] = {
+            "price":       close,
+            "change_pct":  change_pct,
+            "volume_lots": volume,
+            "time": "",
+            "date": "",
+        }
+    return quotes
+
+
+# ── 整合兩市場 ─────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=15, show_spinner=False)
+def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
+    # 全部股票（TSE + OTC）統一丟進 TWSE MIS，OTC 用 otc_ prefix
+    all_items = [{"code": c, "exchange": e} for c, e in symbols]
+    otc_codes  = [c for c, e in symbols if e == "otc"]
+
+    quotes: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+
+    # 主力：TWSE MIS 批次（TSE + OTC 混批）
+    for i in range(0, len(all_items), BATCH_SIZE):
+        try:
+            quotes.update(fetch_twse_batch(all_items[i : i + BATCH_SIZE]))
+        except Exception as exc:
+            errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
+        time.sleep(0.3)
+
+    # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
+    missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
+    if missing_otc:
+        try:
+            tpex_data = fetch_tpex_quotes(missing_otc)
+            # 只補充缺失的，不覆蓋已有資料
+            for code, q in tpex_data.items():
+                if code not in quotes or quotes[code].get("price") is None:
+                    quotes[code] = q
+        except Exception as exc:
+            errors.append(f"TPEx fallback: {exc}")
+
+    latest_time = "--:--:--"
+    latest_date = "--"
+    for q in quotes.values():
+        if q.get("time"):
+            latest_time = str(q["time"])
+        if q.get("date"):
+            latest_date = str(q["date"])
+    if re.fullmatch(r"\d{8}", latest_date):
+        latest_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:8]}"
+
+    return {
+        "quotes":          quotes,
+        "latest_time":     latest_time,
+        "latest_date":     latest_date,
+        "fetched_count":   len(quotes),
+        "requested_count": len(symbols),
+        "errors":          errors,
+    }
+
+
 def estimate_page_height(base_html: str) -> int:
     num_rows   = base_html.count('data-code="')
     num_groups = base_html.count('class="group-card"')
     return max(4000, 1000 + num_groups * 68 + num_rows * 38)
 
 
-def inject_live_script(base_html: str, symbols: list[dict[str, str]]) -> str:
-    """
-    架構改為：瀏覽器 JS 直接呼叫 TWSE MIS API 取得即時報價。
-    - 伺服器端 (Python) 不再抓報價，避免 403。
-    - TWSE MIS 同時支援 tse_代號.tw 和 otc_代號.tw，一個 endpoint 搞定。
-    - 分批呼叫（每批 ≤ 50 檔），避免 URL 過長。
-    - 盤中更新：每 15 秒自動刷新一次。
-    - 非交易時間（z="-"）fallback 到靜態 HTML 的 data-change。
-    """
-    symbols_json = json.dumps(symbols, ensure_ascii=False)
+def inject_live_script(base_html: str, payload: dict[str, Any]) -> str:
+    live_json = json.dumps(payload, ensure_ascii=False)
 
     script = f"""
 <script>
-(function () {{
+(() => {{
   "use strict";
+  const payload = {live_json};
+  const quotes  = payload.quotes || {{}};
 
-  /* ── 股票清單（Python 在 build 時寫入） ──────────────────────────── */
-  const SYMBOLS = {symbols_json};
-
-  /* ── 格式化工具 ─────────────────────────────────────────────────── */
+  /* ── 格式化 ─────────────────────────────────────────────────────────── */
   const fmtPrice = v =>
     (v == null || !isFinite(+v)) ? "--"
     : (+v).toLocaleString("en-US", {{minimumFractionDigits:2, maximumFractionDigits:2}});
@@ -87,200 +274,121 @@ def inject_live_script(base_html: str, symbols: list[dict[str, str]]) -> str:
     return +v > 0 ? `rgba(255,45,84,${{a}})` : `rgba(0,210,110,${{a}})`;
   }};
 
-  /* ── 分批抓 TWSE MIS API（瀏覽器直呼，不過 403）────────────────── */
-  const BATCH = 50;
-  const MIS   = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp";
+  /* ── 主迴圈 ──────────────────────────────────────────────────────────── */
+  const groupStats = new Map();
+  let totalChange = 0, totalCount = 0, totalVolume = 0;
 
-  async function fetchBatch(items) {{
-    const ex_ch = items.map(s => `${{s.exchange}}_${{s.code}}.tw`).join("|");
-    const url   = `${{MIS}}?ex_ch=${{encodeURIComponent(ex_ch)}}&json=1&delay=0&_=${{Date.now()}}`;
-    const resp  = await fetch(url, {{
-      headers: {{
-        "Accept": "application/json,text/plain,*/*",
-        "Referer": "https://mis.twse.com.tw/stock/index.jsp",
-      }},
-      credentials: "omit",
-    }});
-    if (!resp.ok) throw new Error(`HTTP ${{resp.status}}`);
-    return resp.json();
-  }}
+  document.querySelectorAll("tr[data-code]").forEach(row => {{
+    const code  = row.dataset.code;
+    const quote = quotes[code];
 
-  async function fetchAllQuotes() {{
-    const allQuotes = {{}};
-    let latestTime = "--:--:--", latestDate = "--";
+    /* change_pct 優先取 API 值；若 API 未給（非交易時間）才 fallback 到
+       靜態 HTML 的 data-change（build 時的收盤漲跌幅），確保熱力圖永遠有色彩 */
+    let price     = (quote && quote.price      != null) ? +quote.price      : null;
+    let changePct = (quote && quote.change_pct != null) ? +quote.change_pct : null;
+    let volume    = (quote && quote.volume_lots != null) ? +quote.volume_lots : null;
 
-    for (let i = 0; i < SYMBOLS.length; i += BATCH) {{
-      const batch = SYMBOLS.slice(i, i + BATCH);
-      try {{
-        const data = await fetchBatch(batch);
-        const qt   = data.queryTime || {{}};
-        if (qt.sysTime) latestTime = qt.sysTime;
-        if (qt.sysDate) {{
-          const d = qt.sysDate;
-          latestDate = d.length === 8
-            ? `${{d.slice(0,4)}}-${{d.slice(4,6)}}-${{d.slice(6,8)}}`
-            : d;
-        }}
-        for (const item of (data.msgArray || [])) {{
-          const code = (item.c || "").trim();
-          if (!code) continue;
+    if (!isFinite(price))     price     = null;
+    if (!isFinite(changePct)) changePct = null;
+    if (!isFinite(volume))    volume    = null;
 
-          /* z = 即時成交價；盤前盤後為 "-"
-             y = 昨收；v = 累積成交量（張） */
-          const rawZ  = (item.z || "").trim();
-          const rawY  = (item.y || "").trim();
-          const price = (rawZ && rawZ !== "-") ? parseFloat(rawZ) : parseFloat(rawY);
-          const prev  = parseFloat(rawY);
-
-          /* 只有真正有成交（z 有值）才算漲跌幅，否則 null（不污染平均） */
-          let changePct = null;
-          if (rawZ && rawZ !== "-" && isFinite(price) && isFinite(prev) && prev !== 0) {{
-            changePct = (price / prev - 1) * 100;
-          }}
-
-          const volume = parseFloat(item.v);   // 累積成交量（張）
-
-          allQuotes[code] = {{
-            price:      isFinite(price)  ? price  : null,
-            changePct:  changePct,
-            volume:     isFinite(volume) ? volume : null,
-          }};
-        }}
-      }} catch (e) {{
-        console.warn("fetchBatch error", e);
-      }}
+    // fallback：API 無即時 change_pct → 用 HTML data-change
+    if (changePct == null) {{
+      const raw = parseFloat(row.dataset.change);
+      if (isFinite(raw)) changePct = raw;
     }}
-    return {{ quotes: allQuotes, latestTime, latestDate }};
-  }}
 
-  /* ── 把報價更新進 DOM ────────────────────────────────────────────── */
-  function applyQuotes({{ quotes, latestTime, latestDate }}) {{
-    const groupStats = new Map();
-    let totalChange = 0, totalCount = 0, totalVolume = 0;
+    // 更新 dataset（排序用）
+    if (price     != null) row.dataset.price  = price;
+    if (changePct != null) row.dataset.change = changePct;
+    if (volume    != null) row.dataset.volume = volume;
 
-    document.querySelectorAll("tr[data-code]").forEach(row => {{
-      const code  = row.dataset.code;
-      const q     = quotes[code];
-
-      let price     = q ? q.price     : null;
-      let changePct = q ? q.changePct : null;
-      let volume    = q ? q.volume    : null;
-
-      /* fallback：盤前/盤後 changePct=null 時用靜態 data-change（昨收漲跌） */
-      if (changePct == null) {{
-        const raw = parseFloat(row.dataset.change);
-        if (isFinite(raw)) changePct = raw;
-      }}
-
-      /* 更新 dataset（給表格排序用） */
-      if (price     != null && isFinite(price))     row.dataset.price  = price;
-      if (changePct != null && isFinite(changePct)) row.dataset.change = changePct;
-      if (volume    != null && isFinite(volume))    row.dataset.volume = volume;
-
-      /* 更新 TD 內容 */
-      const nums = row.querySelectorAll("td.num");
-      if (price     != null && nums[0]) nums[0].textContent = fmtPrice(price);
-      if (changePct != null && nums[1]) {{
-        nums[1].textContent = fmtPct(changePct);
-        nums[1].className   = `num ${{trend(changePct)}}`;
-      }}
-      if (volume != null && nums[2]) nums[2].textContent = fmtInt(volume);
-
-      /* 累計 group 統計 */
-      const group = row.dataset.group || "";
-      if (!groupStats.has(group)) groupStats.set(group, {{sum:0, count:0, vol:0}});
-      const stat = groupStats.get(group);
-      if (changePct != null && isFinite(changePct)) {{
-        stat.sum += changePct; stat.count++;
-        totalChange += changePct; totalCount++;
-      }}
-      if (volume != null && isFinite(volume)) {{
-        stat.vol += volume; totalVolume += volume;
-      }}
-    }});
-
-    /* KPI 列 */
-    const avg = totalCount ? totalChange / totalCount : null;
-    const kpi = document.querySelectorAll(".kpi .value");
-    if (kpi[2]) {{ kpi[2].textContent = fmtPct(avg); kpi[2].className = `value ${{trend(avg)}}`; }}
-    if (kpi[3]) kpi[3].textContent = fmtInt(totalVolume) + "張";
-    if (kpi[4]) kpi[4].textContent = latestTime;
-
-    /* Toolbar meta */
-    const meta = document.querySelector(".toolbar-meta");
-    if (meta) meta.innerHTML =
-      `共 <b>${{SYMBOLS.length}}</b> 檔 | 即時 <b>${{latestDate}} ${{latestTime}}</b>`;
-
-    /* Group chips */
-    document.querySelectorAll(".group-card").forEach(card => {{
-      const stat = groupStats.get(card.dataset.group);
-      if (!stat || !stat.count) return;
-      const a    = stat.sum / stat.count;
-      const chip = card.querySelector(".group-chip");
-      if (chip) {{ chip.textContent = fmtPct(a); chip.className = `group-chip ${{trend(a)}}`; }}
-    }});
-
-    /* Stage 熱力格 */
-    document.querySelectorAll(".stage-heat-cell").forEach(cell => {{
-      const stat = groupStats.get(cell.dataset.filter);
-      if (!stat || !stat.count) return;
-      const a = stat.sum / stat.count;
-      cell.classList.remove("up", "down", "flat", "na");
-      cell.classList.add(trend(a));
-      cell.style.setProperty("--heat", heat(a));
-      const ce = cell.querySelector(".stage-heat-change");
-      const ve = cell.querySelector(".stage-heat-volume");
-      if (ce) ce.textContent = fmtPct(a);
-      if (ve) ve.textContent = fmtInt(stat.vol) + " 張";
-    }});
-
-    /* 成交量排行 */
-    const board = document.getElementById("vol-leaderboard");
-    if (board) {{
-      const ranked = Array.from(document.querySelectorAll("tr[data-code]"))
-        .map(row => {{
-          const q   = quotes[row.dataset.code];
-          const vol = q && q.volume != null ? +q.volume : null;
-          if (!vol || !isFinite(vol)) return null;
-          let chg = (q && q.changePct != null && isFinite(q.changePct))
-            ? q.changePct : parseFloat(row.dataset.change);
-          if (!isFinite(chg)) chg = null;
-          return {{
-            code:  row.dataset.code,
-            name:  row.dataset.name || row.dataset.code,
-            vol, chg,
-            price: q && q.price != null ? +q.price : null,
-          }};
-        }})
-        .filter(Boolean)
-        .sort((a, b) => b.vol - a.vol)
-        .slice(0, 12);
-
-      board.innerHTML = ranked.map(s => `
-        <div class="vol-card">
-          <div class="vol-top">
-            <span class="vol-code">${{s.code}}</span>
-            <span class="vol-chg ${{trend(s.chg)}}">${{fmtPct(s.chg)}}</span>
-          </div>
-          <div class="vol-name">${{s.name}}</div>
-          <div class="vol-vol">${{fmtInt(s.vol)}} 張</div>
-        </div>`).join("");
+    // 更新表格 TD
+    const nums = row.querySelectorAll("td.num");
+    if (price     != null && nums[0]) nums[0].textContent = fmtPrice(price);
+    if (changePct != null && nums[1]) {{
+      nums[1].textContent = fmtPct(changePct);
+      nums[1].className   = `num ${{trend(changePct)}}`;
     }}
-  }}
+    if (volume    != null && nums[2]) nums[2].textContent = fmtInt(volume);
 
-  /* ── 主流程：載入完立即抓，之後每 15 秒更新 ──────────────────── */
-  async function refresh() {{
-    try {{
-      const result = await fetchAllQuotes();
-      applyQuotes(result);
-    }} catch(e) {{
-      console.error("refresh error", e);
-    }}
-  }}
+    // 累計 group 統計
+    const group = row.dataset.group || "";
+    if (!groupStats.has(group)) groupStats.set(group, {{sum:0, count:0, volume:0}});
+    const stat = groupStats.get(group);
+    if (changePct != null) {{ stat.sum += changePct; stat.count++; totalChange += changePct; totalCount++; }}
+    if (volume    != null) {{ stat.volume += volume; totalVolume += volume; }}
+  }});
 
-  // 頁面載入完後立即跑一次，之後每 15 秒
-  refresh();
-  setInterval(refresh, 15000);
+  /* ── KPI 列 ──────────────────────────────────────────────────────────── */
+  const avg = totalCount ? totalChange / totalCount : null;
+  const kpiValues = document.querySelectorAll(".kpi .value");
+  if (kpiValues[2]) {{ kpiValues[2].textContent = fmtPct(avg); kpiValues[2].className = `value ${{trend(avg)}}`; }}
+  if (kpiValues[3]) kpiValues[3].textContent = fmtInt(totalVolume) + "張";
+  if (kpiValues[4]) kpiValues[4].textContent = payload.latest_time || "--:--:--";
+
+  /* ── Toolbar meta ────────────────────────────────────────────────────── */
+  const meta = document.querySelector(".toolbar-meta");
+  if (meta) meta.innerHTML =
+    `共 <b>${{payload.requested_count}}</b> 檔 ` +
+    `| 已抓 <b>${{payload.fetched_count}}</b> 檔 ` +
+    `| 即時 <b>${{payload.latest_date}} ${{payload.latest_time}}</b>`;
+
+  /* ── Group chips ─────────────────────────────────────────────────────── */
+  document.querySelectorAll(".group-card").forEach(card => {{
+    const stat = groupStats.get(card.dataset.group);
+    if (!stat || !stat.count) return;
+    const a    = stat.sum / stat.count;
+    const chip = card.querySelector(".group-chip");
+    if (chip) {{ chip.textContent = fmtPct(a); chip.className = `group-chip ${{trend(a)}}`; }}
+  }});
+
+  /* ── Stage 熱力格 ────────────────────────────────────────────────────── */
+  document.querySelectorAll(".stage-heat-cell").forEach(cell => {{
+    const stat = groupStats.get(cell.dataset.filter);
+    if (!stat || !stat.count) return;
+    const a = stat.sum / stat.count;
+    cell.classList.remove("up", "down", "flat", "na");
+    cell.classList.add(trend(a));
+    cell.style.setProperty("--heat", heat(a));
+    const ce = cell.querySelector(".stage-heat-change");
+    const ve = cell.querySelector(".stage-heat-volume");
+    if (ce) ce.textContent = fmtPct(a);
+    if (ve) ve.textContent = fmtInt(stat.volume) + " 張";
+  }});
+
+  /* ── 成交量排行 ──────────────────────────────────────────────────────── */
+  const leaderboard = document.getElementById("vol-leaderboard");
+  if (leaderboard) {{
+    const ranked = Array.from(document.querySelectorAll("tr[data-code]"))
+      .map(row => {{
+        const q   = quotes[row.dataset.code];
+        const vol = q && q.volume_lots != null ? +q.volume_lots : null;
+        if (!vol || !isFinite(vol)) return null;
+        let chg = (q && q.change_pct != null && isFinite(+q.change_pct))
+          ? +q.change_pct : parseFloat(row.dataset.change);
+        if (!isFinite(chg)) chg = null;
+        return {{
+          code: row.dataset.code,
+          name: row.dataset.name || row.dataset.code,
+          vol, chg,
+          price: q && q.price != null ? +q.price : null,
+        }};
+      }})
+      .filter(Boolean)
+      .sort((a, b) => b.vol - a.vol)
+      .slice(0, 12);
+
+    leaderboard.innerHTML = ranked.map(s => `
+      <div class="vol-card">
+        <div class="vol-top">
+          <span class="vol-code">${{s.code}}</span>
+          <span class="vol-chg ${{trend(s.chg)}}">${{fmtPct(s.chg)}}</span>
+        </div>
+        <div class="vol-name">${{s.name}}</div>
+        <div class="vol-vol">${{fmtInt(s.vol)}} 張</div>
+      </div>`).join("");
+  }}
 }})();
 </script>
 """
@@ -348,14 +456,28 @@ def main() -> None:
         st.stop()
 
     html_content = HTML_PATH.read_text(encoding="utf-8")
-    symbols = extract_symbols(html_content)
+    symbols = tuple(
+        (item["code"], item["exchange"]) for item in extract_symbols(html_content)
+    )
 
     if not symbols:
         st.error("HTML 裡沒有找到任何 data-code，靜態檔案可能有問題，請重新執行 build 腳本。")
         st.stop()
 
-    # 不再由 Python 抓報價，改由瀏覽器 JS 直接打 TWSE MIS API
-    html_content = inject_live_script(html_content, symbols)
+    with st.spinner(f"正在抓取 {len(symbols)} 檔即時報價…"):
+        payload = fetch_all_quotes(symbols)
+
+    if payload["fetched_count"] == 0:
+        st.warning(
+            "⚠️ 即時報價暫時無法取得（非交易時間，或 API 維護中）。\n"
+            "頁面將顯示靜態快照資料（昨日收盤數據）。"
+        )
+        if payload["errors"]:
+            with st.expander("錯誤詳情"):
+                for e in payload["errors"]:
+                    st.caption(e)
+
+    html_content = inject_live_script(html_content, payload)
     page_height  = estimate_page_height(html_content)
     components.html(html_content, height=page_height, scrolling=False)
 
