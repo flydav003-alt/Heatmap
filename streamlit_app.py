@@ -207,10 +207,10 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         try:
             batch_data = fetch_twse_batch(all_items[i : i + BATCH_SIZE])
             quotes.update(batch_data)
-            st.caption(f"✅ Batch {i // BATCH_SIZE + 1} 完成 ({len(batch_data)} 檔)")
+            # st.caption(f"✅ Batch {i // BATCH_SIZE + 1} 完成 ({len(batch_data)} 檔)")
         except Exception as exc:
             errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
-            st.caption(f"❌ Batch {i // BATCH_SIZE + 1} 失敗：{exc}")
+            # st.caption(f"❌ Batch {i // BATCH_SIZE + 1} 失敗：{exc}")
         time.sleep(2.0)
 
     # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
