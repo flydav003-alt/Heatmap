@@ -22,7 +22,7 @@ HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 45
+BATCH_SIZE  = 30
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -105,6 +105,22 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 
         raw_z  = str(item.get("z", "")).strip()
         raw_pz = str(item.get("pz", "")).strip()
+        # 新增：從五檔取最新價格（更即時）
+        best_ask = None
+        if item.get("a"):
+            asks = str(item.get("a", "")).split('_')
+            if asks and asks[0] not in ("", "-"):
+                best_ask = parse_float(asks[0])
+
+        price = (
+            parse_float(raw_z) or 
+            parse_float(raw_pz) or 
+            best_ask or 
+            parse_float(item.get("o")) or 
+            parse_float(item.get("y"))
+        )
+
+        prev_close = parse_float(item.get("y"))
 
         # 優先順序：即時成交 z > 參考價 pz > 開盤 o > 昨收 y
         price = (
