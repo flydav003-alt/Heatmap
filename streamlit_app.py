@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import random
 import re
 import ssl
 import time
@@ -21,13 +22,12 @@ HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 30   # TWSE MIS 單次可吃 150+ 沒問題，保守用 120
+BATCH_SIZE  = 30
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36"
 )
-
 MAX_RETRIES = 3
 
 
@@ -42,7 +42,7 @@ def parse_float(value: Any) -> float | None:
 
 
 def safe_request(url: str) -> Any:
-    """加強版：加入隨機延遲 + 更長等待，避免被 TWSE 擋"""
+    """帶 retry + 隨機延遲的請求，避免被 TWSE 擋。"""
     for attempt in range(MAX_RETRIES):
         try:
             req = urllib.request.Request(
@@ -56,12 +56,11 @@ def safe_request(url: str) -> Any:
             )
             with urllib.request.urlopen(req, timeout=25, context=SSL_CONTEXT) as resp:
                 return json.loads(resp.read().decode("utf-8-sig"))
-        except Exception as exc:
-            wait = 1.8 * (attempt + 1) + random.uniform(0.5, 1.5)
-            time.sleep(wait)
+        except Exception:
             if attempt == MAX_RETRIES - 1:
                 raise
-            time.sleep(0.8 * (attempt + 1))
+            wait = 1.8 * (attempt + 1) + random.uniform(0.5, 1.5)
+            time.sleep(wait)
 
 
 def extract_symbols(base_html: str) -> list[dict[str, str]]:
@@ -83,16 +82,8 @@ def extract_symbols(base_html: str) -> list[dict[str, str]]:
     return symbols
 
 
-# ── TWSE MIS 即時報價（同時支援上市 tse_ 與上櫃 otc_）──────────────────────────
+# ── TWSE MIS 即時報價（同時支援上市 tse_ 與上櫃 otc_）────────────────────────
 def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
-    """
-    TWSE MIS 回傳欄位：
-      z  = 即時成交價（盤前/盤後為 "-"）
-      y  = 昨收
-      pz = 參考收盤（z="-" 時的 fallback，但此時不計 change_pct）
-      v  = 成交量（單位：張）
-    支援上市 (tse_XXXX.tw) 與上櫃 (otc_XXXX.tw) 混批查詢。
-    """
     ex_ch = "|".join(
         f'{"otc" if item["exchange"] == "otc" else "tse"}_{item["code"]}.tw'
         for item in batch
@@ -112,34 +103,33 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         if not code:
             continue
 
-        raw_z      = str(item.get("z", "")).strip()
-        price      = parse_float(raw_z)
-        prev_close = parse_float(item.get("y"))
-        volume     = parse_float(item.get("v"))   # 張
-
-        # 強制抓價格
         raw_z  = str(item.get("z", "")).strip()
         raw_pz = str(item.get("pz", "")).strip()
 
-        # 優先順序加強：即時成交 > 參考價 > 開盤 > 昨收
-        price = parse_float(raw_z) or parse_float(raw_pz) or parse_float(item.get("o")) or parse_float(item.get("y"))
+        # 優先順序：即時成交 z > 參考價 pz > 開盤 o > 昨收 y
+        price = (
+            parse_float(raw_z)
+            or parse_float(raw_pz)
+            or parse_float(item.get("o"))
+            or parse_float(item.get("y"))
+        )
         prev_close = parse_float(item.get("y"))
+        volume     = parse_float(item.get("v"))
 
         if price is not None and prev_close not in (None, 0.0):
-            change_pct = (price / prev_close - 1) * 100
+            change_pct: float | None = (price / prev_close - 1) * 100
         else:
             change_pct = None
 
-        # ==================== RAW DEBUG ====================
+        # RAW DEBUG（確認資料正常後可移除 raw 欄位）
         raw_debug = {
-            "z": item.get("z"),
-            "pz": item.get("pz"),
-            "o": item.get("o"),
-            "y": item.get("y"),
-            "change_pct_calculated": change_pct
+            "z":          item.get("z"),
+            "pz":         item.get("pz"),
+            "o":          item.get("o"),
+            "y":          item.get("y"),
+            "change_pct": change_pct,
         }
-        # ==================================================
-        
+
         quotes[code] = {
             "price":       price,
             "change_pct":  change_pct,
@@ -147,20 +137,13 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
             "time":        item.get("t") or sys_time,
             "date":        item.get("d") or sys_date,
             "y":           prev_close,
-            "raw": raw_debug   # 新增 raw 資料給前端看
+            "raw":         raw_debug,
         }
-        
-        quotes[code] = {
-            "price":       price,
-            "change_pct":  change_pct,
-            "volume_lots": volume,
-            "time": item.get("t") or sys_time,
-            "date": item.get("d") or sys_date,
-        }
+
     return quotes
 
 
-# ── TPEx 上櫃即時報價（作為 TWSE MIS OTC 的備援 fallback）─────────────────────
+# ── TPEx 上櫃即時報價（作為 TWSE MIS OTC 的備援 fallback）────────────────────
 def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
     """
     使用 TPEx OpenAPI 抓上櫃報價。
@@ -190,8 +173,8 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
             continue
         close  = parse_float(row.get("Close"))
         prev   = parse_float(row.get("PreviousClose") or row.get("Yesterday"))
-        change = parse_float(row.get("Change"))        # 漲跌點數
-        volume = parse_float(row.get("Volume"))        # 千股 = 張
+        change = parse_float(row.get("Change"))
+        volume = parse_float(row.get("Volume"))
 
         if close is not None and prev not in (None, 0.0) and change is not None:
             change_pct: float | None = change / prev * 100
@@ -204,47 +187,44 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
             "price":       close,
             "change_pct":  change_pct,
             "volume_lots": volume,
-            "time": "",
-            "date": "",
+            "time":        "",
+            "date":        "",
         }
     return quotes
 
 
 # ── 整合兩市場 ─────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=10, show_spinner=False) # 先註解掉
+# @st.cache_data(ttl=10, show_spinner=False)  # 先註解掉，debug 完再開
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
-    # 全部股票（TSE + OTC）統一丟進 TWSE MIS，OTC 用 otc_ prefix
     all_items = [{"code": c, "exchange": e} for c, e in symbols]
-    otc_codes  = [c for c, e in symbols if e == "otc"]
+    otc_codes = [c for c, e in symbols if e == "otc"]
 
     quotes: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
 
     # 主力：TWSE MIS 批次（TSE + OTC 混批）
-# 主力：TWSE MIS 批次（TSE + OTC 混批）
-for i in range(0, len(all_items), BATCH_SIZE):
+    for i in range(0, len(all_items), BATCH_SIZE):
         try:
             batch_data = fetch_twse_batch(all_items[i : i + BATCH_SIZE])
             quotes.update(batch_data)
-            st.caption(f"✅ Batch {i//BATCH_SIZE + 1} 完成 ({len(batch_data)} 檔)")
+            st.caption(f"✅ Batch {i // BATCH_SIZE + 1} 完成 ({len(batch_data)} 檔)")
         except Exception as exc:
             errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
-            st.caption(f"❌ Batch {i//BATCH_SIZE + 1} 失敗")
-        
-        time.sleep(2.8)   # 重要：拉長等待時間
+            st.caption(f"❌ Batch {i // BATCH_SIZE + 1} 失敗：{exc}")
+        time.sleep(2.8)
 
     # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
     missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
     if missing_otc:
         try:
             tpex_data = fetch_tpex_quotes(missing_otc)
-            # 只補充缺失的，不覆蓋已有資料
             for code, q in tpex_data.items():
                 if code not in quotes or quotes[code].get("price") is None:
                     quotes[code] = q
         except Exception as exc:
             errors.append(f"TPEx fallback: {exc}")
 
+    # 整理最新時間
     latest_time = "--:--:--"
     latest_date = "--"
     for q in quotes.values():
@@ -498,20 +478,36 @@ def main() -> None:
 
     with st.spinner(f"正在抓取 {len(symbols)} 檔即時報價…"):
         payload = fetch_all_quotes(symbols)
-            # ==================== DEBUG 測試區 ====================
-    st.subheader("🔍 即時資料 Debug（請截圖給我）")
-    
+
+    # ── DEBUG 測試區（確認資料正常後可整段移除）────────────────────────────
+    st.subheader("🔍 即時資料 Debug（確認正常後可移除）")
+
     if payload["errors"]:
         st.error("抓取錯誤：" + " | ".join(payload["errors"]))
 
-    st.caption(f"總共請求 {payload['requested_count']} 檔 | 成功抓到 {payload['fetched_count']} 檔")
-    st.caption(f"最新時間：{payload['latest_date']} {payload['latest_time']}")
+    st.caption(
+        f"總共請求 {payload['requested_count']} 檔 "
+        f"| 成功抓到 {payload['fetched_count']} 檔 "
+        f"| 最新時間：{payload['latest_date']} {payload['latest_time']}"
+    )
 
-    # 顯示前 10 檔的實際資料
     sample = list(payload["quotes"].items())[:10]
     for code, q in sample:
-        st.write(f"**{code}** → 價格: `{q.get('price')}` | 漲跌幅: `{q.get('change_pct')}` | 量: `{q.get('volume_lots')}` | 時間: `{q.get('time')}`")
-    # ====================================================
+        st.write(
+            f"**{code}** → 價格: `{q.get('price')}` "
+            f"| 漲跌幅: `{q.get('change_pct')}` "
+            f"| 量: `{q.get('volume_lots')}` "
+            f"| 時間: `{q.get('time')}`"
+        )
+        if "raw" in q:
+            raw = q["raw"]
+            st.caption(
+                f"   Raw → z: {raw.get('z')}  "
+                f"pz: {raw.get('pz')}  "
+                f"o: {raw.get('o')}  "
+                f"y: {raw.get('y')}"
+            )
+    # ── DEBUG 結束 ──────────────────────────────────────────────────────────
 
     if payload["fetched_count"] == 0:
         st.warning(
@@ -522,11 +518,7 @@ def main() -> None:
             with st.expander("錯誤詳情"):
                 for e in payload["errors"]:
                     st.caption(e)
-    for code, q in sample:
-        st.write(f"**{code}** → 價格: `{q.get('price')}` | 漲跌幅: `{q.get('change_pct')}`")
-        if "raw" in q:
-            st.caption(f"   Raw → z:{q['raw']['z']}  pz:{q['raw']['pz']}  y:{q['raw']['y']}")    
-    
+
     html_content = inject_live_script(html_content, payload)
     page_height  = estimate_page_height(html_content)
     components.html(html_content, height=page_height, scrolling=False)
