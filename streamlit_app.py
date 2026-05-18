@@ -126,6 +126,26 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         else:
             change_pct = None
 
+        # ==================== RAW DEBUG ====================
+        raw_debug = {
+            "z": item.get("z"),
+            "pz": item.get("pz"),
+            "o": item.get("o"),
+            "y": item.get("y"),
+            "change_pct_calculated": change_pct
+        }
+        # ==================================================
+        
+        quotes[code] = {
+            "price":       price,
+            "change_pct":  change_pct,
+            "volume_lots": volume,
+            "time":        item.get("t") or sys_time,
+            "date":        item.get("d") or sys_date,
+            "y":           prev_close,
+            "raw": raw_debug   # 新增 raw 資料給前端看
+        }
+        
         quotes[code] = {
             "price":       price,
             "change_pct":  change_pct,
@@ -475,6 +495,10 @@ def main() -> None:
             # ==================== DEBUG 測試區 ====================
     st.subheader("🔍 即時資料 Debug（請截圖給我）")
     
+    for code, q in sample:
+        st.write(f"**{code}** → 價格: `{q.get('price')}` | 漲跌幅: `{q.get('change_pct')}`")
+        if "raw" in q:
+            st.caption(f"   Raw → z:{q['raw']['z']}  pz:{q['raw']['pz']}  y:{q['raw']['y']}")    
     if payload["errors"]:
         st.error("抓取錯誤：" + " | ".join(payload["errors"]))
     
