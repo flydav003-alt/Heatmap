@@ -495,13 +495,9 @@ def main() -> None:
             # ==================== DEBUG 測試區 ====================
     st.subheader("🔍 即時資料 Debug（請截圖給我）")
     
-    for code, q in sample:
-        st.write(f"**{code}** → 價格: `{q.get('price')}` | 漲跌幅: `{q.get('change_pct')}`")
-        if "raw" in q:
-            st.caption(f"   Raw → z:{q['raw']['z']}  pz:{q['raw']['pz']}  y:{q['raw']['y']}")    
     if payload["errors"]:
         st.error("抓取錯誤：" + " | ".join(payload["errors"]))
-    
+
     st.caption(f"總共請求 {payload['requested_count']} 檔 | 成功抓到 {payload['fetched_count']} 檔")
     st.caption(f"最新時間：{payload['latest_date']} {payload['latest_time']}")
 
@@ -520,7 +516,11 @@ def main() -> None:
             with st.expander("錯誤詳情"):
                 for e in payload["errors"]:
                     st.caption(e)
-
+    for code, q in sample:
+        st.write(f"**{code}** → 價格: `{q.get('price')}` | 漲跌幅: `{q.get('change_pct')}`")
+        if "raw" in q:
+            st.caption(f"   Raw → z:{q['raw']['z']}  pz:{q['raw']['pz']}  y:{q['raw']['y']}")    
+    
     html_content = inject_live_script(html_content, payload)
     page_height  = estimate_page_height(html_content)
     components.html(html_content, height=page_height, scrolling=False)
