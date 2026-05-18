@@ -115,12 +115,13 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         prev_close = parse_float(item.get("y"))
         volume     = parse_float(item.get("v"))   # 張
 
-        # 盤中有真實成交 → 計算漲跌幅；否則 None（不要用 0 污染平均）
+        # 強制抓價格
+        price = parse_float(raw_z) or parse_float(item.get("pz")) or prev_close
+        prev_close = parse_float(item.get("y"))
+
         if price is not None and prev_close not in (None, 0.0):
-            change_pct: float | None = (price / prev_close - 1) * 100
+            change_pct = (price / prev_close - 1) * 100
         else:
-            # z="-" 時 price=None；fallback 到 pz 只用於顯示股價，不算漲跌
-            price      = parse_float(item.get("pz")) or prev_close
             change_pct = None
 
         quotes[code] = {
@@ -184,7 +185,7 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
 
 
 # ── 整合兩市場 ─────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=8, show_spinner=False)
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     # 全部股票（TSE + OTC）統一丟進 TWSE MIS，OTC 用 otc_ prefix
     all_items = [{"code": c, "exchange": e} for c, e in symbols]
