@@ -84,6 +84,10 @@ def extract_symbols(base_html: str) -> list[dict[str, str]]:
 
 # ── TWSE MIS 即時報價（同時支援上市 tse_ 與上櫃 otc_）────────────────────────
 def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
+    """
+    價格優先順序（依照你的要求）：
+    最新成交(z) > 五檔最佳賣價 > 開盤價(o) > 昨收(y)
+    """
     ex_ch = "|".join(
         f'{"otc" if item["exchange"] == "otc" else "tse"}_{item["code"]}.tw'
         for item in batch
@@ -105,45 +109,36 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
 
         raw_z  = str(item.get("z", "")).strip()
         raw_pz = str(item.get("pz", "")).strip()
-        # 新增：從五檔取最新價格（更即時）
+
+        # 五檔最佳賣價 (a = 賣價五檔，第一檔通常最接近最新價格)
         best_ask = None
         if item.get("a"):
-            asks = str(item.get("a", "")).split('_')
-            if asks and asks[0] not in ("", "-"):
+            asks = str(item.get("a", "")).split("_")
+            if asks and asks[0] not in ("", "-", "0"):
                 best_ask = parse_float(asks[0])
 
+        # 最終價格：最新成交 > 五檔 > 開盤 > 昨收
         price = (
-            parse_float(raw_z) or 
-            parse_float(raw_pz) or 
-            best_ask or 
-            parse_float(item.get("o")) or 
-            parse_float(item.get("y"))
+            parse_float(raw_z) or      # 1. 最新成交價
+            best_ask or                # 2. 五檔最佳賣價
+            parse_float(item.get("o")) or  # 3. 開盤價
+            parse_float(item.get("y"))     # 4. 昨收
         )
 
         prev_close = parse_float(item.get("y"))
-
-        # 優先順序：即時成交 z > 參考價 pz > 開盤 o > 昨收 y
-        price = (
-            parse_float(raw_z)
-            or parse_float(raw_pz)
-            or parse_float(item.get("o"))
-            or parse_float(item.get("y"))
-        )
-        prev_close = parse_float(item.get("y"))
-        volume     = parse_float(item.get("v"))
+        volume = parse_float(item.get("v"))
 
         if price is not None and prev_close not in (None, 0.0):
-            change_pct: float | None = (price / prev_close - 1) * 100
+            change_pct = (price / prev_close - 1) * 100
         else:
             change_pct = None
 
-        # RAW DEBUG（確認資料正常後可移除 raw 欄位）
+        # RAW DEBUG（確認穩定後可移除）
         raw_debug = {
-            "z":          item.get("z"),
-            "pz":         item.get("pz"),
-            "o":          item.get("o"),
-            "y":          item.get("y"),
-            "change_pct": change_pct,
+            "z": item.get("z"),
+            "best_ask": asks[0] if 'asks' in locals() and asks else None,
+            "o": item.get("o"),
+            "y": item.get("y"),
         }
 
         quotes[code] = {
@@ -153,7 +148,7 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
             "time":        item.get("t") or sys_time,
             "date":        item.get("d") or sys_date,
             "y":           prev_close,
-            "raw":         raw_debug,
+            "raw":         raw_debug
         }
 
     return quotes
@@ -227,7 +222,7 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
             # st.caption(f"❌ Batch {i // BATCH_SIZE + 1} 失敗：{exc}")
-        time.sleep(2.0)
+        time.sleep(2.8)
 
     # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
     missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
