@@ -21,7 +21,7 @@ HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 40   # TWSE MIS 單次可吃 150+ 沒問題，保守用 120
+BATCH_SIZE  = 30   # TWSE MIS 單次可吃 150+ 沒問題，保守用 120
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -118,7 +118,11 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         volume     = parse_float(item.get("v"))   # 張
 
         # 強制抓價格
-        price = parse_float(raw_z) or parse_float(item.get("pz")) or prev_close
+        raw_z  = str(item.get("z", "")).strip()
+        raw_pz = str(item.get("pz", "")).strip()
+
+        # 優先順序加強：即時成交 > 參考價 > 開盤 > 昨收
+        price = parse_float(raw_z) or parse_float(raw_pz) or parse_float(item.get("o")) or parse_float(item.get("y"))
         prev_close = parse_float(item.get("y"))
 
         if price is not None and prev_close not in (None, 0.0):
@@ -207,7 +211,7 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
 
 
 # ── 整合兩市場 ─────────────────────────────────────────────────────────────────
-# @st.cache_data(ttl=10, show_spinner=False) # 先註解掉
+@st.cache_data(ttl=10, show_spinner=False) # 先註解掉
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     # 全部股票（TSE + OTC）統一丟進 TWSE MIS，OTC 用 otc_ prefix
     all_items = [{"code": c, "exchange": e} for c, e in symbols]
@@ -218,14 +222,16 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
 
     # 主力：TWSE MIS 批次（TSE + OTC 混批）
 # 主力：TWSE MIS 批次（TSE + OTC 混批）
-    for i in range(0, len(all_items), BATCH_SIZE):
+for i in range(0, len(all_items), BATCH_SIZE):
         try:
             batch_data = fetch_twse_batch(all_items[i : i + BATCH_SIZE])
             quotes.update(batch_data)
+            st.caption(f"✅ Batch {i//BATCH_SIZE + 1} 完成 ({len(batch_data)} 檔)")
         except Exception as exc:
             errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
+            st.caption(f"❌ Batch {i//BATCH_SIZE + 1} 失敗")
         
-        time.sleep(1.5)   # 增加等待時間，避免被 TWSE 阻擋
+        time.sleep(2.8)   # 重要：拉長等待時間
 
     # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
     missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
