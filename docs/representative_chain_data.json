@@ -1,359 +1,359 @@
 {
-  "updated_at": "2026-05-18 13:51:56",
-  "latest_price_date": "2026-05-18",
+  "updated_at": "2026-05-19 12:47:00",
+  "latest_price_date": "2026-05-19",
   "themes": {
     "ASIC": {
-      "avg_change_pct": -4.0562,
-      "volume_lots": 29794.97,
+      "avg_change_pct": -1.1714,
+      "volume_lots": 22187.64,
       "stocks": [
         {
           "code": "2454",
           "name": "聯發科",
-          "price": 3260.0,
-          "change_pct": -4.258443465491924,
-          "volume_lots": 7341.02
+          "price": 3400.0,
+          "change_pct": 4.294478527607362,
+          "volume_lots": 7040.54
         },
         {
           "code": "3443",
           "name": "創意",
-          "price": 4845.0,
-          "change_pct": -4.532019704433497,
-          "volume_lots": 3680.87
+          "price": 4740.0,
+          "change_pct": -2.1671826625387,
+          "volume_lots": 2458.3
         },
         {
           "code": "3035",
           "name": "智原",
-          "price": 190.0,
-          "change_pct": -4.282115869017632,
-          "volume_lots": 17316.91
+          "price": 193.0,
+          "change_pct": 1.5789473684210527,
+          "volume_lots": 10899.39
         },
         {
           "code": "5274",
           "name": "信驊",
-          "price": 16150.0,
-          "change_pct": -6.077348066298343,
-          "volume_lots": 538.95
+          "price": 15925.0,
+          "change_pct": -1.393188854489164,
+          "volume_lots": 447.67
         },
         {
           "code": "6643",
           "name": "M31",
-          "price": 612.0,
-          "change_pct": -1.1308562197092082,
-          "volume_lots": 917.22
+          "price": 562.0,
+          "change_pct": -8.169934640522875,
+          "volume_lots": 1341.75
         }
       ]
     },
     "CoWoS": {
-      "avg_change_pct": -2.562,
-      "volume_lots": 8133.66,
+      "avg_change_pct": -1.4994,
+      "volume_lots": 5877.69,
       "stocks": [
         {
           "code": "1560",
           "name": "中砂",
-          "price": 642.0,
-          "change_pct": -1.2307692307692308,
-          "volume_lots": 2485.44
+          "price": 649.0,
+          "change_pct": 1.0903426791277258,
+          "volume_lots": 1362.97
         },
         {
           "code": "3583",
           "name": "辛耘",
-          "price": 888.0,
-          "change_pct": -4.413347685683531,
-          "volume_lots": 3559.75
+          "price": 900.0,
+          "change_pct": 1.3513513513513513,
+          "volume_lots": 2059.64
         },
         {
           "code": "6187",
           "name": "萬潤",
-          "price": 1135.0,
-          "change_pct": 0.8888888888888888,
-          "volume_lots": 1303.67
+          "price": 1115.0,
+          "change_pct": -1.762114537444934,
+          "volume_lots": 1537.14
         },
         {
           "code": "6640",
           "name": "均華",
-          "price": 1305.0,
-          "change_pct": -4.744525547445255,
-          "volume_lots": 475.47
+          "price": 1290.0,
+          "change_pct": -1.1494252873563218,
+          "volume_lots": 281.64
         },
         {
           "code": "3131",
           "name": "弘塑",
-          "price": 2775.0,
-          "change_pct": -3.3101045296167246,
-          "volume_lots": 309.33
+          "price": 2580.0,
+          "change_pct": -7.027027027027027,
+          "volume_lots": 636.3
         }
       ]
     },
     "HBM": {
-      "avg_change_pct": -1.6159,
-      "volume_lots": 320098.55,
+      "avg_change_pct": -3.0206,
+      "volume_lots": 228769.96,
       "stocks": [
         {
           "code": "2337",
           "name": "旺宏",
-          "price": 162.5,
-          "change_pct": -3.8461538461538463,
-          "volume_lots": 129725.44
+          "price": 160.0,
+          "change_pct": -1.5384615384615385,
+          "volume_lots": 79739.0
         },
         {
           "code": "2408",
           "name": "南亞科",
-          "price": 311.5,
-          "change_pct": -8.651026392961878,
-          "volume_lots": 160442.33
+          "price": 305.0,
+          "change_pct": -2.086677367576244,
+          "volume_lots": 117077.71
         },
         {
           "code": "8299",
           "name": "群聯",
-          "price": 2735.0,
-          "change_pct": 3.207547169811321,
-          "volume_lots": 8642.24
+          "price": 2465.0,
+          "change_pct": -9.87202925045704,
+          "volume_lots": 9028.23
         },
         {
           "code": "3260",
           "name": "威剛",
-          "price": 418.0,
-          "change_pct": -1.647058823529412,
-          "volume_lots": 11796.95
+          "price": 390.0,
+          "change_pct": -6.698564593301436,
+          "volume_lots": 14928.89
         },
         {
           "code": "6531",
           "name": "愛普*",
-          "price": 1080.0,
-          "change_pct": 2.857142857142857,
-          "volume_lots": 9491.59
+          "price": 1135.0,
+          "change_pct": 5.092592592592593,
+          "volume_lots": 7996.12
         }
       ]
     },
     "CPO": {
-      "avg_change_pct": -1.671,
-      "volume_lots": 10308.73,
+      "avg_change_pct": -0.6355,
+      "volume_lots": 7688.41,
       "stocks": [
         {
           "code": "4979",
           "name": "華星光",
-          "price": 551.0,
-          "change_pct": 3.766478342749529,
-          "volume_lots": 1463.37
+          "price": 523.0,
+          "change_pct": -5.081669691470054,
+          "volume_lots": 951.56
         },
         {
           "code": "4908",
           "name": "前鼎",
-          "price": 235.0,
-          "change_pct": -3.0927835051546393,
-          "volume_lots": 379.08
+          "price": 231.5,
+          "change_pct": -1.4893617021276597,
+          "volume_lots": 538.47
         },
         {
           "code": "3163",
           "name": "波若威",
           "price": 900.0,
-          "change_pct": -5.263157894736842,
-          "volume_lots": 1060.49
+          "change_pct": 0.0,
+          "volume_lots": 431.96
         },
         {
           "code": "3450",
           "name": "聯鈞",
-          "price": 395.5,
-          "change_pct": -6.279620853080568,
-          "volume_lots": 4681.7
+          "price": 410.0,
+          "change_pct": 3.6662452591656134,
+          "volume_lots": 4301.78
         },
         {
           "code": "3596",
           "name": "智易",
-          "price": 183.5,
-          "change_pct": 2.5139664804469275,
-          "volume_lots": 2724.09
+          "price": 183.0,
+          "change_pct": -0.2724795640326975,
+          "volume_lots": 1464.64
         }
       ]
     },
     "BBU": {
-      "avg_change_pct": -1.7233,
-      "volume_lots": 16575.72,
+      "avg_change_pct": -0.2062,
+      "volume_lots": 12804.7,
       "stocks": [
         {
           "code": "2308",
           "name": "台達電",
-          "price": 2075.0,
-          "change_pct": -3.7122969837587005,
-          "volume_lots": 12351.49
+          "price": 2020.0,
+          "change_pct": -2.6506024096385543,
+          "volume_lots": 10082.19
         },
         {
           "code": "6409",
           "name": "旭隼",
-          "price": 716.0,
-          "change_pct": 1.5602836879432624,
-          "volume_lots": 830.12
+          "price": 708.0,
+          "change_pct": -1.1173184357541899,
+          "volume_lots": 591.47
         },
         {
           "code": "6412",
           "name": "群電",
-          "price": 88.1,
-          "change_pct": -3.925845147219194,
-          "volume_lots": 2953.99
+          "price": 88.4,
+          "change_pct": 0.34052213393870595,
+          "volume_lots": 1338.02
         },
         {
           "code": "6121",
           "name": "新普",
-          "price": 365.0,
-          "change_pct": -0.8152173913043478,
-          "volume_lots": 440.13
+          "price": 374.5,
+          "change_pct": 2.6027397260273974,
+          "volume_lots": 793.02
         }
       ]
     },
     "伺服器": {
-      "avg_change_pct": -3.2926,
-      "volume_lots": 325264.18,
+      "avg_change_pct": -0.6049,
+      "volume_lots": 158703.3,
       "stocks": [
         {
           "code": "2317",
           "name": "鴻海",
           "price": 248.5,
-          "change_pct": 1.6359918200409,
-          "volume_lots": 138413.48
+          "change_pct": 0.0,
+          "volume_lots": 63512.36
         },
         {
           "code": "2382",
           "name": "廣達",
-          "price": 306.0,
-          "change_pct": -8.520179372197308,
-          "volume_lots": 66013.75
+          "price": 300.0,
+          "change_pct": -1.9607843137254901,
+          "volume_lots": 36475.34
         },
         {
           "code": "3231",
           "name": "緯創",
           "price": 135.5,
-          "change_pct": -1.8115942028985508,
-          "volume_lots": 67278.96
+          "change_pct": 0.0,
+          "volume_lots": 29121.54
         },
         {
           "code": "6669",
           "name": "緯穎",
-          "price": 5115.0,
-          "change_pct": -5.887764489420423,
-          "volume_lots": 2346.76
+          "price": 5090.0,
+          "change_pct": -0.4887585532746823,
+          "volume_lots": 1405.0
         },
         {
           "code": "2356",
           "name": "英業達",
-          "price": 52.2,
-          "change_pct": -1.8796992481203008,
-          "volume_lots": 51211.24
+          "price": 51.9,
+          "change_pct": -0.5747126436781609,
+          "volume_lots": 28189.07
         }
       ]
     },
     "散熱": {
-      "avg_change_pct": -1.5072,
-      "volume_lots": 14541.98,
+      "avg_change_pct": -2.1832,
+      "volume_lots": 11210.72,
       "stocks": [
         {
           "code": "3017",
           "name": "奇鋐",
-          "price": 2455.0,
-          "change_pct": -3.9138943248532287,
-          "volume_lots": 6646.56
+          "price": 2410.0,
+          "change_pct": -1.8329938900203666,
+          "volume_lots": 4751.19
         },
         {
           "code": "3324",
           "name": "雙鴻",
-          "price": 982.0,
-          "change_pct": -1.306532663316583,
-          "volume_lots": 2867.51
+          "price": 966.0,
+          "change_pct": -1.6293279022403258,
+          "volume_lots": 2597.14
         },
         {
           "code": "2421",
           "name": "建準",
-          "price": 140.0,
-          "change_pct": -3.7800687285223367,
-          "volume_lots": 4211.72
+          "price": 140.5,
+          "change_pct": 0.35714285714285715,
+          "volume_lots": 2799.89
         },
         {
           "code": "3653",
           "name": "健策",
-          "price": 3465.0,
-          "change_pct": 2.9717682020802374,
-          "volume_lots": 816.2
+          "price": 3270.0,
+          "change_pct": -5.627705627705628,
+          "volume_lots": 1062.5
         }
       ]
     },
     "載板PCB": {
-      "avg_change_pct": -6.69,
-      "volume_lots": 63526.23,
+      "avg_change_pct": -1.4736,
+      "volume_lots": 45146.54,
       "stocks": [
         {
           "code": "3037",
           "name": "欣興",
-          "price": 821.0,
-          "change_pct": -6.81044267877412,
-          "volume_lots": 31599.9
+          "price": 816.0,
+          "change_pct": -0.6090133982947624,
+          "volume_lots": 21413.92
         },
         {
           "code": "8046",
           "name": "南電",
-          "price": 786.0,
-          "change_pct": -7.201889020070838,
-          "volume_lots": 19102.82
+          "price": 791.0,
+          "change_pct": 0.6361323155216284,
+          "volume_lots": 10859.62
         },
         {
           "code": "2383",
           "name": "台光電",
-          "price": 4615.0,
-          "change_pct": -6.199186991869919,
-          "volume_lots": 2616.04
+          "price": 4545.0,
+          "change_pct": -1.5167930660888407,
+          "volume_lots": 3423.89
         },
         {
           "code": "2368",
           "name": "金像電",
-          "price": 1290.0,
-          "change_pct": -9.79020979020979,
-          "volume_lots": 7370.63
+          "price": 1250.0,
+          "change_pct": -3.10077519379845,
+          "volume_lots": 7982.65
         },
         {
           "code": "6274",
           "name": "台燿",
-          "price": 1260.0,
-          "change_pct": -3.4482758620689653,
-          "volume_lots": 2836.84
+          "price": 1225.0,
+          "change_pct": -2.7777777777777777,
+          "volume_lots": 1466.46
         }
       ]
     },
     "低軌衛星": {
-      "avg_change_pct": 2.2689,
-      "volume_lots": 47842.89,
+      "avg_change_pct": 2.4644,
+      "volume_lots": 77272.54,
       "stocks": [
         {
           "code": "3491",
           "name": "昇達科",
-          "price": 1855.0,
-          "change_pct": 9.763313609467456,
-          "volume_lots": 2938.31
+          "price": 1765.0,
+          "change_pct": -4.8517520215633425,
+          "volume_lots": 6587.91
         },
         {
           "code": "7717",
           "name": "萊德光電-KY",
-          "price": 666.0,
-          "change_pct": 9.900990099009901,
-          "volume_lots": 549.05
+          "price": 683.0,
+          "change_pct": 2.5525525525525525,
+          "volume_lots": 1080.92
         },
         {
           "code": "2485",
           "name": "兆赫",
-          "price": 68.3,
-          "change_pct": -3.3946251768033946,
-          "volume_lots": 42823.15
+          "price": 73.0,
+          "change_pct": 6.881405563689605,
+          "volume_lots": 67032.9
         },
         {
           "code": "3138",
           "name": "耀登",
-          "price": 148.5,
-          "change_pct": -2.941176470588235,
-          "volume_lots": 1234.61
+          "price": 163.0,
+          "change_pct": 9.764309764309765,
+          "volume_lots": 2303.98
         },
         {
           "code": "2314",
           "name": "台揚",
-          "price": 12.35,
-          "change_pct": -1.984126984126984,
-          "volume_lots": 297.77
+          "price": 12.1,
+          "change_pct": -2.0242914979757085,
+          "volume_lots": 266.83
         }
       ]
     }
