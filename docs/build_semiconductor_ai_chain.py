@@ -604,7 +604,7 @@ def make_table_rows(rows: list[StockRow]) -> str:
             f' data-price="{p}" data-change="{ch}" data-volume="{vol}"'
             f' data-capital="{cap}" data-eps="{eps}" data-yoy="{yoy}" data-mom="{mom}">'
             f'<td class="c-code">'
-            f'<a class="sym" href="https://tw.stock.yahoo.com/quote/{r.code}.{"two" if r.market == "上櫃" else "tw"}" target="_blank" rel="noopener">{r.code}</a>'
+            f'<a class="sym" href="https://tw.stock.yahoo.com/quote/{r.code}.{"TWO" if r.market == "上櫃" else "TW"}" target="_blank" rel="noopener">{r.code}</a>'
             f'<span class="mkt-badge">{r.market}</span>'
             f'</td>'
             f'<td class="c-name">{html.escape(r.name)}</td>'
