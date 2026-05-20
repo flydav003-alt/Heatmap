@@ -52,82 +52,78 @@ def extract_symbols(base_html: str) -> list[dict[str, str]]:
     return symbols
 
 
-# ── yfinance 批次抓取 ─────────────────────────────────────────────────────────
-def fetch_yf_batch(codes: list[str]) -> dict[str, dict[str, Any]]:
-    """用 yfinance 批次抓台股報價，代碼加 .TW（上市）或 .TWO（上櫃）。"""
-    tickers_str = " ".join(f"{c}.TW" for c in codes)
-    quotes: dict[str, dict[str, Any]] = {}
-    try:
-        data = yf.download(
-            tickers_str,
-            period="2d",
-            interval="1d",
-            group_by="ticker",
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-        )
-        now = datetime.now()
-        latest_date = now.strftime("%Y-%m-%d")
-        latest_time = now.strftime("%H:%M:%S")
-
-        for code in codes:
-            ticker = f"{code}.TW"
-            try:
-                if len(codes) == 1:
-                    df = data
-                else:
-                    df = data[ticker]
-                if df is None or df.empty or len(df) < 1:
-                    continue
-                close_today = float(df["Close"].iloc[-1])
-                if len(df) >= 2:
-                    prev = float(df["Close"].iloc[-2])
-                    chg_pct = (close_today / prev - 1) * 100 if prev else None
-                else:
-                    chg_pct = None
-                vol = float(df["Volume"].iloc[-1]) if "Volume" in df.columns else None
-                # Yahoo 成交量單位是股，換算成張（1張=1000股）
-                vol_lots = vol / 1000 if vol is not None else None
-                quotes[code] = {
-                    "price":       close_today,
-                    "change_pct":  chg_pct,
-                    "volume_lots": vol_lots,
-                    "time":        latest_time,
-                    "date":        latest_date,
-                }
-            except Exception:
+# ── yfinance 單檔抓取（先試 .TW 上市，再試 .TWO 上櫃）─────────────────────────
+def fetch_one(code: str) -> dict[str, Any] | None:
+    now         = datetime.now()
+    latest_date = now.strftime("%Y-%m-%d")
+    latest_time = now.strftime("%H:%M:%S")
+    for suffix in (".TW", ".TWO"):
+        try:
+            fi    = yf.Ticker(f"{code}{suffix}").fast_info
+            price = fi.last_price
+            prev  = fi.previous_close
+            if price is None or price == 0:
                 continue
-    except Exception:
-        pass
-    return quotes
+            chg_pct  = (price / prev - 1) * 100 if prev else None
+            # Yahoo 成交量是股，換算成張（1張=1000股）
+            vol      = getattr(fi, "last_volume", None)
+            vol_lots = vol / 1000 if vol else None
+            return {
+                "price":       float(price),
+                "change_pct":  float(chg_pct) if chg_pct is not None else None,
+                "volume_lots": float(vol_lots) if vol_lots is not None else None,
+                "time":        latest_time,
+                "date":        latest_date,
+            }
+        except Exception:
+            continue
+    return None
 
 
 # ── 整合報價 ───────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=180, show_spinner=False)  # cache 3分鐘，避免重複打 Yahoo
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
-    all_codes = [c for c, e in symbols]
     quotes: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
 
-    # 分批抓，每批 YF_BATCH_SIZE 檔
-    for i in range(0, len(all_codes), YF_BATCH_SIZE):
-        batch = all_codes[i : i + YF_BATCH_SIZE]
+    for code, exchange in symbols:
         try:
-            batch_data = fetch_yf_batch(batch)
-            quotes.update(batch_data)
+            # 上市直接試 .TW，上櫃直接試 .TWO，省去多餘嘗試
+            suffix = ".TWO" if exchange == "otc" else ".TW"
+            now    = datetime.now()
+            fi     = yf.Ticker(f"{code}{suffix}").fast_info
+            price  = fi.last_price
+            prev   = fi.previous_close
+            if price is None or price == 0:
+                # 上市若 .TW 抓不到，補試 .TWO（反之亦然）
+                fallback = ".TW" if suffix == ".TWO" else ".TWO"
+                fi    = yf.Ticker(f"{code}{fallback}").fast_info
+                price = fi.last_price
+                prev  = fi.previous_close
+            if price is None or price == 0:
+                continue
+            chg_pct  = (price / prev - 1) * 100 if prev else None
+            vol      = getattr(fi, "last_volume", None)
+            vol_lots = vol / 1000 if vol else None
+            quotes[code] = {
+                "price":       float(price),
+                "change_pct":  float(chg_pct) if chg_pct is not None else None,
+                "volume_lots": float(vol_lots) if vol_lots is not None else None,
+                "time":        now.strftime("%H:%M:%S"),
+                "date":        now.strftime("%Y-%m-%d"),
+            }
         except Exception as exc:
-            errors.append(f"yfinance batch {i // YF_BATCH_SIZE}: {exc}")
-        time.sleep(0.5)
+            errors.append(f"{code}: {exc}")
+        time.sleep(0.05)  # 小延遲避免 rate limit
 
     # 整理時間
     latest_time = "--:--:--"
     latest_date = "--"
     for q in quotes.values():
         if q.get("time"):
-            latest_time = str(q["time"])
+            latest_time = q["time"]
         if q.get("date"):
-            latest_date = str(q["date"])
+            latest_date = q["date"]
 
     return {
         "quotes":          quotes,
