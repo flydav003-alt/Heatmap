@@ -604,7 +604,7 @@ def make_table_rows(rows: list[StockRow]) -> str:
             f' data-price="{p}" data-change="{ch}" data-volume="{vol}"'
             f' data-capital="{cap}" data-eps="{eps}" data-yoy="{yoy}" data-mom="{mom}">'
             f'<td class="c-code">'
-            f'<b class="sym">{r.code}</b>'
+            f'<a class="sym" href="https://tw.stock.yahoo.com/quote/{r.code}.{"two" if r.market == "上櫃" else "tw"}" target="_blank" rel="noopener">{r.code}</a>'
             f'<span class="mkt-badge">{r.market}</span>'
             f'</td>'
             f'<td class="c-name">{html.escape(r.name)}</td>'
@@ -951,11 +951,12 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       white-space: nowrap;
     }}
     .c-code {{ min-width: 66px; }}
-    .sym {{ font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--accent); }}
+    .sym {{ font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--accent); text-decoration: none; }}
+    .sym:hover {{ text-decoration: underline; text-underline-offset: 2px; }}
     .mkt-badge {{
       display: inline-block; margin-left: 5px;
-      font-size: 9px; color: var(--muted);
-      border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px;
+      font-size: 9px; color: var(--text2);
+      border: 1px solid var(--border2); border-radius: 3px; padding: 1px 4px;
     }}
     .c-name {{ min-width: 80px; font-weight: 600; font-size: 13.5px; }}
     .role-tag {{
