@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-05-20 12:31:42",
+  "updated_at": "2026-05-20 15:49:30",
   "latest_price_date": "2026-05-20",
   "themes": {
     "ASIC": {
@@ -22,7 +22,7 @@
         },
         {
           "code": "3035",
-          "name": "智原",
+          "name": "3035",
           "price": 188.5,
           "change_pct": -2.33160621761658,
           "volume_lots": 10331.54
