@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import http.cookiejar
 import json
 import random
 import re
@@ -19,16 +20,45 @@ ROOT      = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "docs" / "index.html"
 
 # ── API endpoints ──────────────────────────────────────────────────────────────
-TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
-TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
+TWSE_MIS_URL      = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+TWSE_MIS_INIT_URL = "https://mis.twse.com.tw/stock/index.jsp"
+TPEX_MIS_URL      = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 15
+# OpenAPI fallback（當 MIS 全掛時用收盤價代替）
+TWSE_OPENAPI_URL  = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+TPEX_OPENAPI_URL  = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+
+BATCH_SIZE  = 30   # 每批縮小，降低 query string 長度
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36"
 )
 MAX_RETRIES = 3
+
+# ── Cookie-aware opener（一次 session，全程複用）────────────────────────────────
+_cookie_jar    = http.cookiejar.CookieJar()
+_cookie_opener = urllib.request.build_opener(
+    urllib.request.HTTPSHandler(context=SSL_CONTEXT),
+    urllib.request.HTTPCookieProcessor(_cookie_jar),
+)
+_mis_session_ready = False
+
+
+def _ensure_mis_session() -> None:
+    """先打一次 MIS 首頁取得 session cookie，之後批次請求才不會被擋。"""
+    global _mis_session_ready
+    if _mis_session_ready:
+        return
+    try:
+        req = urllib.request.Request(
+            TWSE_MIS_INIT_URL,
+            headers={"User-Agent": UA, "Accept": "text/html,*/*"},
+        )
+        _cookie_opener.open(req, timeout=15)
+        _mis_session_ready = True
+    except Exception:
+        pass  # 拿不到 cookie 也繼續試，不要中斷
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -42,7 +72,8 @@ def parse_float(value: Any) -> float | None:
 
 
 def safe_request(url: str) -> Any:
-    """帶 retry + 隨機延遲的請求，避免被 TWSE 擋。"""
+    """帶 cookie session + retry + 隨機延遲，盡量避免被 TWSE MIS 擋。"""
+    _ensure_mis_session()
     for attempt in range(MAX_RETRIES):
         try:
             req = urllib.request.Request(
@@ -54,12 +85,12 @@ def safe_request(url: str) -> Any:
                     "Origin": "https://mis.twse.com.tw",
                 },
             )
-            with urllib.request.urlopen(req, timeout=25, context=SSL_CONTEXT) as resp:
+            with _cookie_opener.open(req, timeout=25) as resp:
                 return json.loads(resp.read().decode("utf-8-sig"))
         except Exception:
             if attempt == MAX_RETRIES - 1:
                 raise
-            wait = 1.8 * (attempt + 1) + random.uniform(0.5, 1.5)
+            wait = 2.5 * (attempt + 1) + random.uniform(0.8, 2.0)
             time.sleep(wait)
 
 
@@ -196,27 +227,98 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
     return quotes
 
 
+# ── OpenAPI 收盤價 fallback（MIS 全掛時保底，顯示昨日收盤）──────────────────
+def fetch_openapi_fallback(
+    tse_codes: set[str], otc_codes: set[str]
+) -> dict[str, dict[str, Any]]:
+    """
+    當 TWSE MIS 完全無法使用時，改抓 openapi.twse.com.tw / tpex.org.tw
+    的收盤行情，確保頁面至少有收盤價與漲跌幅可以顯示。
+    """
+    quotes: dict[str, dict[str, Any]] = {}
+
+    # ── 上市（TWSE OpenAPI）────────────────────────────────────────────
+    if tse_codes:
+        try:
+            req = urllib.request.Request(
+                TWSE_OPENAPI_URL,
+                headers={"User-Agent": UA, "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
+                rows = json.loads(resp.read().decode("utf-8"))
+            for row in rows:
+                code = str(row.get("Code", "")).strip()
+                if code not in tse_codes:
+                    continue
+                close  = parse_float(row.get("ClosingPrice"))
+                change = parse_float(row.get("Change"))
+                prev   = (close - change) if close is not None and change is not None else None
+                chg_pct = (change / prev * 100) if prev not in (None, 0) and change is not None else None
+                quotes[code] = {
+                    "price":       close,
+                    "change_pct":  chg_pct,
+                    "volume_lots": parse_float(row.get("TradeVolume")),
+                    "time":        "",
+                    "date":        "",
+                    "is_fallback": True,
+                }
+        except Exception:
+            pass
+
+    # ── 上櫃（TPEx OpenAPI daily close）───────────────────────────────
+    if otc_codes:
+        try:
+            req = urllib.request.Request(
+                TPEX_OPENAPI_URL,
+                headers={"User-Agent": UA, "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
+                rows = json.loads(resp.read().decode("utf-8"))
+            for row in rows:
+                code = str(row.get("SecuritiesCompanyCode", "")).strip()
+                if code not in otc_codes:
+                    continue
+                close  = parse_float(row.get("Close"))
+                change = parse_float(row.get("Change"))
+                prev   = (close - change) if close is not None and change is not None else None
+                chg_pct = (change / prev * 100) if prev not in (None, 0) and change is not None else None
+                quotes[code] = {
+                    "price":       close,
+                    "change_pct":  chg_pct,
+                    "volume_lots": parse_float(row.get("TradingShares")),
+                    "time":        "",
+                    "date":        "",
+                    "is_fallback": True,
+                }
+        except Exception:
+            pass
+
+    return quotes
+
+
 # ── 整合兩市場 ─────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=12, show_spinner=False)  # 先註解掉，debug 完再開
+@st.cache_data(ttl=12, show_spinner=False)
 def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
-    all_items = [{"code": c, "exchange": e} for c, e in symbols]
-    otc_codes = [c for c, e in symbols if e == "otc"]
+    all_items  = [{"code": c, "exchange": e} for c, e in symbols]
+    tse_codes  = {c for c, e in symbols if e == "tse"}
+    otc_codes  = [c for c, e in symbols if e == "otc"]
 
     quotes: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
+    mis_success = 0
 
-    # 主力：TWSE MIS 批次（TSE + OTC 混批）
+    # ── 主力：TWSE MIS 批次（TSE + OTC 混批，帶 session cookie）──────
     for i in range(0, len(all_items), BATCH_SIZE):
+        batch_num = i // BATCH_SIZE
         try:
             batch_data = fetch_twse_batch(all_items[i : i + BATCH_SIZE])
             quotes.update(batch_data)
-            # st.caption(f"✅ Batch {i // BATCH_SIZE + 1} 完成 ({len(batch_data)} 檔)")
+            mis_success += 1
         except Exception as exc:
-            errors.append(f"TWSE MIS batch {i // BATCH_SIZE}: {exc}")
-            # st.caption(f"❌ Batch {i // BATCH_SIZE + 1} 失敗：{exc}")
-        time.sleep(2.8)
+            errors.append(f"TWSE MIS batch {batch_num}: {exc}")
+        time.sleep(3.5 + random.uniform(0.5, 1.5))
 
-    # 備援：OTC 若在 TWSE MIS 抓不到，才用 TPEx fallback 補齊
+    # ── 備援 1：OTC 若在 TWSE MIS 抓不到，用 TPEx realtime 補齊 ─────
     missing_otc = [c for c in otc_codes if c not in quotes or quotes[c].get("price") is None]
     if missing_otc:
         try:
@@ -225,9 +327,19 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
                 if code not in quotes or quotes[code].get("price") is None:
                     quotes[code] = q
         except Exception as exc:
-            errors.append(f"TPEx fallback: {exc}")
+            errors.append(f"TPEx realtime fallback: {exc}")
 
-    # 整理最新時間
+    # ── 備援 2：MIS 完全失敗 → 改用 OpenAPI 收盤價保底 ──────────────
+    if mis_success == 0:
+        errors.append("TWSE MIS 全批失敗，改用 OpenAPI 收盤快照")
+        missing_tse = tse_codes - {c for c, q in quotes.items() if q.get("price") is not None}
+        missing_otc_set = {c for c in otc_codes if c not in quotes or quotes[c].get("price") is None}
+        fallback = fetch_openapi_fallback(missing_tse, missing_otc_set)
+        for code, q in fallback.items():
+            if code not in quotes or quotes[code].get("price") is None:
+                quotes[code] = q
+
+    # ── 整理最新時間 ─────────────────────────────────────────────────
     latest_time = "--:--:--"
     latest_date = "--"
     for q in quotes.values():
@@ -238,6 +350,8 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     if re.fullmatch(r"\d{8}", latest_date):
         latest_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:8]}"
 
+    using_fallback = all(q.get("is_fallback") for q in quotes.values() if q.get("price") is not None)
+
     return {
         "quotes":          quotes,
         "latest_time":     latest_time,
@@ -245,6 +359,7 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         "fetched_count":   len(quotes),
         "requested_count": len(symbols),
         "errors":          errors,
+        "using_fallback":  using_fallback,
     }
 
 
@@ -489,10 +604,15 @@ def main() -> None:
             "⚠️ 即時報價暫時無法取得（非交易時間，或 API 維護中）。\n"
             "頁面將顯示靜態快照資料（昨日收盤數據）。"
         )
-        if payload["errors"]:
-            with st.expander("錯誤詳情"):
-                for e in payload["errors"]:
-                    st.caption(e)
+    elif payload.get("using_fallback"):
+        st.info(
+            "ℹ️ TWSE MIS 即時 API 暫時無法連線，已自動切換為昨日收盤快照。\n"
+            "數據仍包含完整漲跌幅，熱力圖正常顯示。"
+        )
+    if payload["errors"]:
+        with st.expander("API 錯誤詳情", expanded=False):
+            for e in payload["errors"]:
+                st.caption(e)
 
     html_content = inject_live_script(html_content, payload)
     page_height  = estimate_page_height(html_content)
