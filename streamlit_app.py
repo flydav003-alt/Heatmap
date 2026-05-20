@@ -22,7 +22,7 @@ HTML_PATH = ROOT / "docs" / "index.html"
 TWSE_MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 TPEX_MIS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_quotes"
 
-BATCH_SIZE  = 30
+BATCH_SIZE  = 15
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
