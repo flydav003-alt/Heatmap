@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import html
-import http.cookiejar
 import json
 import random
 import re
-import ssl
 import time
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 import streamlit.components.v1 as components
+from curl_cffi import requests as cffi_requests
 
 
 ROOT      = Path(__file__).resolve().parent
@@ -28,37 +26,37 @@ TPEX_MIS_URL      = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_
 TWSE_OPENAPI_URL  = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TPEX_OPENAPI_URL  = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 
-BATCH_SIZE  = 10   # 每批縮小，降低 query string 長度
-SSL_CONTEXT = ssl._create_unverified_context()
-UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36"
-)
-MAX_RETRIES = 3
+BATCH_SIZE   = 30    # curl_cffi 過得了，batch 可以拉回大一點
+MAX_RETRIES  = 3
+IMPERSONATE  = "chrome136"  # 完整模擬 Chrome TLS fingerprint
 
-# ── Cookie-aware opener（一次 session，全程複用）────────────────────────────────
-_cookie_jar    = http.cookiejar.CookieJar()
-_cookie_opener = urllib.request.build_opener(
-    urllib.request.HTTPSHandler(context=SSL_CONTEXT),
-    urllib.request.HTTPCookieProcessor(_cookie_jar),
-)
+# ── curl_cffi Session（全程複用，自動帶 cookie）────────────────────────────────
+_session: cffi_requests.Session | None = None
 _mis_session_ready = False
 
 
+def _get_session() -> cffi_requests.Session:
+    global _session
+    if _session is None:
+        _session = cffi_requests.Session(impersonate=IMPERSONATE)
+    return _session
+
+
 def _ensure_mis_session() -> None:
-    """先打一次 MIS 首頁取得 session cookie，之後批次請求才不會被擋。"""
+    """先打一次 MIS 首頁取得 session cookie。"""
     global _mis_session_ready
     if _mis_session_ready:
         return
     try:
-        req = urllib.request.Request(
+        _get_session().get(
             TWSE_MIS_INIT_URL,
-            headers={"User-Agent": UA, "Accept": "text/html,*/*"},
+            headers={"Referer": "https://mis.twse.com.tw/"},
+            timeout=15,
+            verify=False,
         )
-        _cookie_opener.open(req, timeout=15)
         _mis_session_ready = True
     except Exception:
-        pass  # 拿不到 cookie 也繼續試，不要中斷
+        pass
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -72,25 +70,27 @@ def parse_float(value: Any) -> float | None:
 
 
 def safe_request(url: str) -> Any:
-    """帶 cookie session + retry + 隨機延遲，盡量避免被 TWSE MIS 擋。"""
+    """curl_cffi 模擬 Chrome TLS + cookie session + retry。"""
     _ensure_mis_session()
+    sess = _get_session()
     for attempt in range(MAX_RETRIES):
         try:
-            req = urllib.request.Request(
+            resp = sess.get(
                 url,
                 headers={
-                    "User-Agent": UA,
-                    "Accept": "application/json,*/*",
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
                     "Referer": "https://mis.twse.com.tw/stock/index.jsp",
-                    "Origin": "https://mis.twse.com.tw",
+                    "X-Requested-With": "XMLHttpRequest",
                 },
+                timeout=25,
+                verify=False,
             )
-            with _cookie_opener.open(req, timeout=25) as resp:
-                return json.loads(resp.read().decode("utf-8-sig"))
+            resp.raise_for_status()
+            return resp.json()
         except Exception:
             if attempt == MAX_RETRIES - 1:
                 raise
-            wait = 2.5 * (attempt + 1) + random.uniform(0.8, 2.0)
+            wait = 2.0 * (attempt + 1) + random.uniform(0.5, 1.5)
             time.sleep(wait)
 
 
@@ -123,11 +123,9 @@ def fetch_twse_batch(batch: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
         f'{"otc" if item["exchange"] == "otc" else "tse"}_{item["code"]}.tw'
         for item in batch
     )
-    query = urllib.parse.urlencode(
-        {"ex_ch": ex_ch, "json": "1", "delay": "0", "_": str(int(time.time() * 1000))},
-        safe="|_.",
-    )
-    data = safe_request(f"{TWSE_MIS_URL}?{query}")
+    ts    = int(time.time() * 1000)
+    query = f"ex_ch={ex_ch}&json=1&delay=0&_={ts}"
+    data  = safe_request(f"{TWSE_MIS_URL}?{query}")
 
     quotes: dict[str, dict[str, Any]] = {}
     sys_time = (data.get("queryTime") or {}).get("sysTime", "")
@@ -186,16 +184,14 @@ def fetch_tpex_quotes(otc_codes: list[str]) -> dict[str, dict[str, Any]]:
     if not otc_codes:
         return {}
     try:
-        req = urllib.request.Request(
+        resp = _get_session().get(
             TPEX_MIS_URL,
-            headers={
-                "User-Agent": UA,
-                "Accept": "application/json",
-                "Referer": "https://www.tpex.org.tw/",
-            },
+            headers={"Referer": "https://www.tpex.org.tw/"},
+            timeout=20,
+            verify=False,
         )
-        with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
-            rows = json.loads(resp.read().decode("utf-8"))
+        resp.raise_for_status()
+        rows = resp.json()
     except Exception:
         return {}
 
@@ -240,12 +236,9 @@ def fetch_openapi_fallback(
     # ── 上市（TWSE OpenAPI）────────────────────────────────────────────
     if tse_codes:
         try:
-            req = urllib.request.Request(
-                TWSE_OPENAPI_URL,
-                headers={"User-Agent": UA, "Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
-                rows = json.loads(resp.read().decode("utf-8"))
+            resp = _get_session().get(TWSE_OPENAPI_URL, timeout=20, verify=False)
+            resp.raise_for_status()
+            rows = resp.json()
             for row in rows:
                 code = str(row.get("Code", "")).strip()
                 if code not in tse_codes:
@@ -268,12 +261,9 @@ def fetch_openapi_fallback(
     # ── 上櫃（TPEx OpenAPI daily close）───────────────────────────────
     if otc_codes:
         try:
-            req = urllib.request.Request(
-                TPEX_OPENAPI_URL,
-                headers={"User-Agent": UA, "Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
-                rows = json.loads(resp.read().decode("utf-8"))
+            resp = _get_session().get(TPEX_OPENAPI_URL, timeout=20, verify=False)
+            resp.raise_for_status()
+            rows = resp.json()
             for row in rows:
                 code = str(row.get("SecuritiesCompanyCode", "")).strip()
                 if code not in otc_codes:
