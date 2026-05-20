@@ -28,7 +28,7 @@ TPEX_MIS_URL      = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_realtime_
 TWSE_OPENAPI_URL  = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TPEX_OPENAPI_URL  = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 
-BATCH_SIZE  = 30   # 每批縮小，降低 query string 長度
+BATCH_SIZE  = 10   # 每批縮小，降低 query string 長度
 SSL_CONTEXT = ssl._create_unverified_context()
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
