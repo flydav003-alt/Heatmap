@@ -219,6 +219,17 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
   const fmtPrice = v => (v==null||!isFinite(+v)) ? "--"
     : (+v).toLocaleString("en-US",{{minimumFractionDigits:2,maximumFractionDigits:2}});
   const fmtInt   = v => (v==null||!isFinite(+v)) ? "--" : Math.round(+v).toLocaleString("en-US");
+
+  // 成交額億元格式化：張數 × 股價 / 1e5（張數已是千股，再 ×1000 → 股，×price / 1e8 = 億）
+  // volume_lots 單位是張，price 單位是元
+  // 億元 = volume_lots(張) × 1000(股/張) × price / 1e8 = volume_lots × price / 1e5
+  const fmtYi = (lots, price) => {{
+    if(lots==null||!isFinite(+lots)||price==null||!isFinite(+price)) return "--";
+    const yi=(+lots)*(+price)/1e5;
+    if(yi<0.1)  return "<0.1億";
+    if(yi<10)   return yi.toFixed(1)+"億";
+    return Math.round(yi)+"億";
+  }};
   const fmtPct   = v => {{
     if(v==null||!isFinite(+v)) return "--";
     return (+v>0?"+":"")+( +v).toFixed(2)+"%";
@@ -257,7 +268,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     const nums=row.querySelectorAll("td.num");
     if(price    !=null&&nums[0]) nums[0].textContent=fmtPrice(price);
     if(changePct!=null&&nums[1]){{nums[1].textContent=fmtPct(changePct);nums[1].className=`num ${{trend(changePct)}}`;}}
-    if(volume   !=null&&nums[2]) nums[2].textContent=fmtInt(volume);
+    if(volume   !=null&&nums[2]) nums[2].textContent=fmtYi(volume, price);
 
     const avgVol20=safe(row.dataset.avgVol20);
     const p5close =safe(row.dataset.p5Close);
@@ -385,7 +396,12 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     const ve=cell.querySelector(".stage-heat-volume");
     const ge=cell.querySelector(".heat-grade");
     if(ce) ce.textContent=fmtPct(a);
-    if(ve) ve.textContent=fmtInt(stat.volume)+" 張";
+    if(ve) {{
+      // 族群成交額(億) = Σ(個股張數 × 個股價格) / 1e5
+      // stat.volume 是族群張數加總，但要配上各股價，這裡用族群均價估算
+      const avgPx = stat.cntPrice>0 ? stat.sumPrice/stat.cntPrice : null;
+      ve.textContent = avgPx ? fmtYi(stat.volume, avgPx) : "--";
+    }}
     if(ge&&ginfo){{
       const gr=ginfo.grade;
       const sfx=GRADE_SUFFIX[gr]||"";
@@ -455,7 +471,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       <div class="vol-card">
         <div class="vol-top"><span class="vol-code">${{s.code}}</span><span class="vol-chg ${{trend(s.chg)}}">${{fmtPct(s.chg)}}</span></div>
         <div class="vol-name">${{s.name}}</div>
-        <div class="vol-vol">${{fmtInt(s.vol)}} 張</div>
+        <div class="vol-vol">${{fmtYi(s.vol, s.price)}}</div>
       </div>`).join("");
   }}
 
