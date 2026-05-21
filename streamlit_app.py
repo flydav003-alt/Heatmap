@@ -263,6 +263,18 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     const p5close =safe(row.dataset.p5Close);
     const p20high =safe(row.dataset.p20High);
 
+    // history_5d 讀取優先順序：
+    // 1. build 預埋的 data-history-5d（最穩定，每天 build 時固定）
+    // 2. 盤中 quote.history_5d（streamlit 當日即時抓取的 fallback）
+    let hist5d = null;
+    try {{
+      const raw5d = row.dataset.history5d;  // data-history-5d → camelCase: history5d
+      if (raw5d && raw5d.length > 4) hist5d = JSON.parse(raw5d);
+    }} catch(e) {{}}
+    if (!hist5d && quote && quote.history_5d && quote.history_5d.length >= 2) {{
+      hist5d = quote.history_5d;
+    }}
+
     const group=row.dataset.group||"";
     if(!groupStats.has(group)) groupStats.set(group,{{
       sum:0,count:0,volume:0,upCount:0,totalCount:0,
@@ -284,9 +296,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     if(p20high !=null){{stat.sumP20high+=p20high;stat.cntP20++;}}
 
     // 收集個股歷史（供折線圖累計族群均漲幅）
-    const hist=(quote&&quote.history_5d)||[];
-    if(hist.length>=2&&p5close!=null&&p5close>0){{
-      stat.history5d.push(hist);
+    // hist5d 已在上方解析（build預埋優先 > 盤中fallback）
+    if(hist5d&&hist5d.length>=2&&p5close!=null&&p5close>0){{
+      stat.history5d.push(hist5d);
     }}
 
     // 存個股資料供入場雷達
