@@ -484,7 +484,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           .map(h=>(h[i].c/h[0].c-1)*100);
         dailyPcts.push(pctsToday.length?pctsToday.reduce((a,b)=>a+b,0)/pctsToday.length:null);
       }}
-      const points=labels.map((d,i)=>({d,pct:dailyPcts[i]}));
+      const points=labels.map((d,i)=>({{d,pct:dailyPcts[i]}}));
       const shortName=group.split(" / ")[0];
       groupLines.push({{group:shortName,color,points,grade:(groupGrades.get(group)||{{}}).grade||"D"}});
     }});
