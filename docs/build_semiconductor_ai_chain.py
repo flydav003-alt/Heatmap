@@ -228,9 +228,12 @@ class StockRow:
     mom: float | None
     scope: str
     # ── New historical attributes (added in v2) ──────────────────────────────
-    avg_vol20: float | None = field(default=None)    # 過去20日平均成交張數
-    p5_close: float | None = field(default=None)     # 5日前收盤價
-    p20_high: float | None = field(default=None)     # 過去20日最高收盤價
+    avg_vol20:   float | None       = field(default=None)   # 過去20日平均成交張數
+    p5_close:    float | None       = field(default=None)   # 5日前收盤價
+    p20_high:    float | None       = field(default=None)   # 過去20日最高收盤價
+    # history_5d: 過去5個交易日收盤價序列 [{d:"MM/DD", c:float}, ...]
+    # 供盤中 JS 折線圖使用；預埋在 data-history-5d JSON 屬性中
+    history_5d:  list[dict] | None  = field(default=None)
 
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
@@ -376,7 +379,7 @@ def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict[str, float | 
             vol_series = volume.tail(20)
             avg_vol20 = float(vol_series.mean() / 1000) if len(vol_series) >= 1 else None
 
-            # p5_close: 5個交易日前的收盤價
+            # p5_close: 5個交易日前的收盤價（倒數第6根，index -6）
             if len(close) >= 6:
                 p5_close = float(close.iloc[-6])
             elif len(close) >= 2:
@@ -388,7 +391,21 @@ def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict[str, float | 
             high_series = close.tail(20)
             p20_high = float(high_series.max()) if len(high_series) >= 1 else None
 
-            return {"avg_vol20": avg_vol20, "p5_close": p5_close, "p20_high": p20_high}
+            # history_5d: 過去5個交易日收盤序列（供 JS 折線圖用）
+            history_5d: list[dict] = []
+            for ts, v in close.tail(5).items():
+                try:
+                    d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                    history_5d.append({"d": d, "c": round(float(v), 2)})
+                except Exception:
+                    pass
+
+            return {
+                "avg_vol20":  avg_vol20,
+                "p5_close":   p5_close,
+                "p20_high":   p20_high,
+                "history_5d": history_5d if len(history_5d) >= 2 else None,
+            }
         except Exception:
             return None
 
@@ -575,9 +592,10 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
 
         # 歷史指標（可能為 None，若 yfinance 無資料）
         h = hist_attrs.get(code, {})
-        avg_vol20 = h.get("avg_vol20")
-        p5_close  = h.get("p5_close")
-        p20_high  = h.get("p20_high")
+        avg_vol20  = h.get("avg_vol20")
+        p5_close   = h.get("p5_close")
+        p20_high   = h.get("p20_high")
+        history_5d = h.get("history_5d")   # list[{d,c}] 或 None
 
         if market == "上市":
             px, rev, fin = listed_prices.get(code, {}), listed_revenue.get(code, {}), listed_financial.get(code, {})
@@ -589,7 +607,7 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
                 capital_amt / 100_000_000 if capital_amt is not None else None,
                 parse_float(fin.get("eps")), parse_float(rev.get("yoy")), parse_float(rev.get("mom")),
                 "官方半導體全覆蓋" if is_core_semi else "AI延伸硬體鏈",
-                avg_vol20=avg_vol20, p5_close=p5_close, p20_high=p20_high,
+                avg_vol20=avg_vol20, p5_close=p5_close, p20_high=p20_high, history_5d=history_5d,
             ))
         else:
             px, rev      = otc_prices.get(code, {}), otc_revenue.get(code, {})
@@ -601,7 +619,7 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
                 capital_million / 100 if capital_million is not None else None,
                 parse_float(otc_eps.get(code)), parse_float(rev.get("yoy")), parse_float(rev.get("mom")),
                 "官方半導體全覆蓋" if is_core_semi else "AI延伸硬體鏈",
-                avg_vol20=avg_vol20, p5_close=p5_close, p20_high=p20_high,
+                avg_vol20=avg_vol20, p5_close=p5_close, p20_high=p20_high, history_5d=history_5d,
             ))
 
     meta = {
@@ -646,15 +664,18 @@ def make_table_rows(rows: list[StockRow]) -> str:
         role = r.group.split(" / ")[-1] if " / " in r.group else r.group
 
         # Historical dataset attributes (empty string if None → JS skips safely)
-        avg_vol20 = "" if r.avg_vol20 is None else round(r.avg_vol20, 2)
-        p5_close  = "" if r.p5_close  is None else round(r.p5_close,  2)
-        p20_high  = "" if r.p20_high  is None else round(r.p20_high,  2)
+        avg_vol20  = "" if r.avg_vol20  is None else round(r.avg_vol20, 2)
+        p5_close   = "" if r.p5_close   is None else round(r.p5_close,  2)
+        p20_high   = "" if r.p20_high   is None else round(r.p20_high,  2)
+        # history_5d 序列：JSON 壓縮後寫入 data attribute，JS 端 JSON.parse 讀取
+        history_5d_attr = "" if not r.history_5d else json.dumps(r.history_5d, ensure_ascii=False, separators=(",", ":"))
 
         out.append(
             f'<tr data-code="{r.code}" data-name="{html.escape(r.name)}" data-group="{html.escape(r.group)}"'
             f' data-price="{p}" data-change="{ch}" data-volume="{vol}"'
             f' data-capital="{cap}" data-eps="{eps}" data-yoy="{yoy}" data-mom="{mom}"'
-            f' data-avg-vol20="{avg_vol20}" data-p5-close="{p5_close}" data-p20-high="{p20_high}">'
+            f' data-avg-vol20="{avg_vol20}" data-p5-close="{p5_close}" data-p20-high="{p20_high}"'
+            f' data-history-5d=\'{history_5d_attr}\'>'
             f'<td class="c-code">'
             f'<a class="sym" href="https://tw.stock.yahoo.com/quote/{r.code}.{"TWO" if r.market == "上櫃" else "TW"}" target="_blank" rel="noopener">{r.code}</a>'
             f'<span class="mkt-badge">{r.market}</span>'
@@ -689,9 +710,10 @@ def build_representative_payload(rows: list[StockRow], meta: dict[str, Any]) -> 
             "stocks": [{"code": p.code, "name": p.name, "price": p.price,
                         "change_pct": p.change_pct,
                         "volume_lots": round((p.volume_shares or 0) / 1000, 2),
-                        "avg_vol20": p.avg_vol20,
-                        "p5_close":  p.p5_close,
-                        "p20_high":  p.p20_high} for p in picks],
+                        "avg_vol20":  p.avg_vol20,
+                        "p5_close":   p.p5_close,
+                        "p20_high":   p.p20_high,
+                        "history_5d": p.history_5d} for p in picks],
         }
     return {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "latest_price_date": meta["latest_price_date"], "themes": themes}
