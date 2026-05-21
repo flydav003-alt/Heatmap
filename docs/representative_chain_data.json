@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-05-21 10:37:14",
+  "updated_at": "2026-05-21 11:11:13",
   "latest_price_date": "2026-05-21",
   "themes": {
     "ASIC": {
@@ -677,7 +677,7 @@
       "stocks": [
         {
           "code": "2308",
-          "name": "台達電",
+          "name": "2308",
           "price": 1915.0,
           "change_pct": 0.0,
           "volume_lots": 10890.05,
