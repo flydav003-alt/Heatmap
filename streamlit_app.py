@@ -460,18 +460,18 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
   }}
 
   /* ══════════════════════════════════════════════════════════════════════════
-     ① 族群輪動時序圖（5日折線）
-     用 SVG 手繪，每個族群一條彩色折線，顯示 5 日平均漲幅趨勢
+     ① 族群輪動時序圖（全面重設計版）
+     - 左側 Y 軸刻度標籤
+     - 網格線輔助閱讀
+     - 線條依終點漲幅排序，前三名加粗+顯示標籤
+     - 滑鼠懸停顯示 tooltip
+     - 零線明顯區分漲跌區域
   ══════════════════════════════════════════════════════════════════════════ */
   const chartEl=document.getElementById("rotation-chart");
   if(chartEl){{
-    // 計算每個族群每天的均漲幅（依個股 history_5d 反推）
-    // history_5d 是收盤價序列，算相對第1天的累計漲幅%
-    const groupLines=[]; // {{group, color, points:[{{d,pct}}]}}
+    const groupLines=[];
     groupStats.forEach((stat,group)=>{{
       if(!stat.count||!stat.history5d.length)return;
-      const color=GROUP_COLOR[group]||"#7a9bbb";
-      // 找最長的共同日期序列
       const allHists=stat.history5d;
       if(!allHists.length)return;
       const nDays=allHists[0].length;
@@ -479,76 +479,171 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const labels=allHists[0].map(h=>h.d);
       const dailyPcts=[];
       for(let i=0;i<nDays;i++){{
-        const pctsToday=allHists
-          .filter(h=>h.length>i&&h[0].c>0)
-          .map(h=>(h[i].c/h[0].c-1)*100);
-        dailyPcts.push(pctsToday.length?pctsToday.reduce((a,b)=>a+b,0)/pctsToday.length:null);
+        const vals=allHists.filter(h=>h.length>i&&h[0].c>0).map(h=>(h[i].c/h[0].c-1)*100);
+        dailyPcts.push(vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null);
       }}
       const points=labels.map((d,i)=>({{d,pct:dailyPcts[i]}}));
-      const shortName=group.split(" / ")[0];
-      groupLines.push({{group:shortName,color,points,grade:(groupGrades.get(group)||{{}}).grade||"D"}});
+      const finalPct=dailyPcts[dailyPcts.length-1]??0;
+      const gi=groupGrades.get(group)||{{}};
+      groupLines.push({{
+        group, shortName:group.split(" / ")[0],
+        color:GROUP_COLOR[group]||"#7a9bbb",
+        points, finalPct,
+        grade:gi.grade||"D",
+        stage:gi.stage||"",
+      }});
     }});
 
-    if(!groupLines.length){{chartEl.innerHTML='<div style="color:#3d5470;padding:20px;font-size:12px">歷史資料載入中…</div>';}}
-    else{{
-      // 找 Y 軸範圍
+    if(!groupLines.length){{
+      chartEl.innerHTML='<div style="color:#3d5470;padding:24px;font-size:12px;font-style:italic">歷史資料尚未載入，請確認 build 腳本已成功執行並安裝 yfinance</div>';
+    }}else{{
+      // 依終點漲幅排序（高到低）
+      groupLines.sort((a,b)=>b.finalPct-a.finalPct);
+
+      // Y 軸範圍
       let yMin=0,yMax=0;
-      groupLines.forEach(l=>l.points.forEach(p=>{{ if(p.pct!=null){{ yMin=Math.min(yMin,p.pct); yMax=Math.max(yMax,p.pct); }} }} ));
-      const yPad=Math.max(0.5,(yMax-yMin)*0.15);
+      groupLines.forEach(l=>l.points.forEach(p=>{{
+        if(p.pct!=null){{yMin=Math.min(yMin,p.pct);yMax=Math.max(yMax,p.pct);}}
+      }}));
+      const yRange=yMax-yMin||1;
+      const yPad=Math.max(1,yRange*0.18);
       yMin-=yPad; yMax+=yPad;
 
-      const W=900,H=220,PL=8,PR=90,PT=14,PB=32;
+      // 畫布尺寸（留足夠左邊給Y軸，右邊給標籤）
+      const W=980, H=280, PL=46, PR=130, PT=20, PB=36;
       const cW=W-PL-PR, cH=H-PT-PB;
       const nDays=groupLines[0].points.length;
-      const xScale=i=>(nDays<2)?cW/2:i*(cW/(nDays-1));
-      const yScale=v=>(v==null)?null:cH-(v-yMin)/(yMax-yMin)*cH;
+      const xS=i=>(nDays<2?cW/2:i*(cW/(nDays-1)));
+      const yS=v=>(v==null?null:cH-(v-yMin)/(yMax-yMin)*cH);
 
-      let paths="", labels="", dots="";
-      const GRADE_COLOR_LOCAL={{A:"#ff6680",B:"#fbbf24",C:"#c084fc",D:"#3d5470",E:"#00d26e"}};
+      // ── 網格線 & Y 軸刻度 ──────────────────────────────────────────────
+      const nGridY=5;
+      let gridLines="", yTickLabels="";
+      for(let g=0;g<=nGridY;g++){{
+        const val=yMin+(yMax-yMin)*(g/nGridY);
+        const y=yS(val);
+        if(y==null)continue;
+        const isZero=Math.abs(val)<(yMax-yMin)*0.05;
+        gridLines+=`<line x1="0" y1="${{y.toFixed(1)}}" x2="${{cW}}" y2="${{y.toFixed(1)}}"
+          stroke="${{isZero?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.05)"}}"
+          stroke-width="${{isZero?1.5:1}}"
+          ${{isZero?'stroke-dasharray="none"':'stroke-dasharray="3,4"'}}/>`;
+        // Y 軸標籤
+        const sign=val>0?"+":"";
+        yTickLabels+=`<text x="-8" y="${{y.toFixed(1)+4}}" fill="${{isZero?"rgba(255,255,255,0.3)":val>0?"rgba(255,104,128,0.6)":"rgba(0,210,110,0.6)"}}"
+          font-size="9" text-anchor="end" font-family="IBM Plex Mono,monospace">${{sign+val.toFixed(1)}}%</text>`;
+      }}
+
+      // 零線填色（漲區淡紅 / 跌區淡綠）
+      const y0=yS(0)??cH/2;
+      const upZone  =`<rect x="0" y="0" width="${{cW}}" height="${{y0.toFixed(1)}}" fill="rgba(255,45,84,0.03)"/>`;
+      const downZone=`<rect x="0" y="${{y0.toFixed(1)}}" width="${{cW}}" height="${{(cH-y0).toFixed(1)}}" fill="rgba(0,210,110,0.03)"/>`;
+
+      // X 軸日期
+      let xLabels="";
+      groupLines[0].points.forEach((p,i)=>{{
+        xLabels+=`<text x="${{xS(i).toFixed(1)}}" y="${{cH+24}}" fill="rgba(122,155,187,0.7)"
+          font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">${{p.d}}</text>`;
+      }});
+
+      // ── 折線 ───────────────────────────────────────────────────────────
+      // 先畫淡線（後排），再畫亮線（前排），讓重要線在最上層
+      const TOP_N=4;
+      let pathsBg="", pathsFg="", dotsFg="", labelsFg="";
+
+      // 右側 label 防重疊：記錄已用 Y 位置
+      const usedY=[];
+      const clampY=(y,minGap=13)=>{{
+        let adj=y;
+        for(const used of usedY){{
+          if(Math.abs(adj-used)<minGap) adj=used+minGap*(adj>=used?1:-1);
+        }}
+        usedY.push(adj);
+        return adj;
+      }};
 
       groupLines.forEach((line,li)=>{{
-        const pts=line.points.map((p,i)=>{{const y=yScale(p.pct);return y!=null?`${{xScale(i).toFixed(1)}},${{y.toFixed(1)}}`:null;}}).filter(Boolean);
+        const isTop=li<TOP_N;
+        const pts=line.points
+          .map((p,i)=>{{const y=yS(p.pct);return y!=null?`${{xS(i).toFixed(1)}},${{y.toFixed(1)}}`:null;}})
+          .filter(Boolean);
         if(pts.length<2)return;
-        const d="M"+pts.join("L");
-        const isTop=li<3;
-        paths+=`<path d="${{d}}" fill="none" stroke="${{line.color}}" stroke-width="${{isTop?"2":"1.2"}}" stroke-opacity="${{isTop?"0.9":"0.45"}}" stroke-linejoin="round" stroke-linecap="round"/>`;
-        // 最後一個點的 label
-        const lastPt=line.points[line.points.length-1];
-        const lx=xScale(nDays-1)+6;
-        const ly=yScale(lastPt.pct);
-        if(ly!=null){{
-          const grC=GRADE_COLOR_LOCAL[line.grade]||line.color;
-          labels+=`<text x="${{lx}}" y="${{ly+4}}" fill="${{grC}}" font-size="10" font-family="IBM Plex Mono,monospace" font-weight="${{isTop?"700":"400"}}">${{line.group}}</text>`;
-          // 最後一天的點
-          if(lastPt.pct!=null){{
-            dots+=`<circle cx="${{xScale(nDays-1)}}" cy="${{ly}}" r="${{isTop?3.5:2}}" fill="${{line.color}}" opacity="${{isTop?1:0.6}}"/>`;
+
+        const pathD="M"+pts.join("L");
+        const opacity=isTop?1:0.28;
+        const sw=isTop?2.5:1;
+
+        const pathEl=`<path d="${{pathD}}" fill="none" stroke="${{line.color}}"
+          stroke-width="${{sw}}" stroke-opacity="${{opacity}}"
+          stroke-linejoin="round" stroke-linecap="round"/>`;
+
+        if(isTop) pathsFg+=pathEl;
+        else       pathsBg+=pathEl;
+
+        // 前 TOP_N 條加端點 + 右側標籤
+        if(isTop){{
+          const lastP=line.points[line.points.length-1];
+          const rawY=yS(lastP.pct);
+          if(rawY!=null){{
+            const ly=clampY(rawY);
+            const sign=line.finalPct>0?"+":"";
+            const pctStr=sign+line.finalPct.toFixed(1)+"%";
+            const gradeC=GRADE_COLOR[line.grade]||line.color;
+
+            // 端點 dot
+            dotsFg+=`<circle cx="${{xS(nDays-1).toFixed(1)}}" cy="${{rawY.toFixed(1)}}"
+              r="4" fill="${{line.color}}" stroke="#04080f" stroke-width="1.5"/>`;
+
+            // 連接端點到標籤的引導線
+            if(Math.abs(ly-rawY)>3){{
+              dotsFg+=`<line x1="${{xS(nDays-1)+5}}" y1="${{rawY.toFixed(1)}}"
+                x2="${{xS(nDays-1)+14}}" y2="${{ly.toFixed(1)}}"
+                stroke="${{line.color}}" stroke-width="1" stroke-opacity="0.4"/>`;
+            }}
+
+            // 族群名 + 漲幅 + 等級 badge
+            labelsFg+=`
+              <text x="${{xS(nDays-1)+18}}" y="${{(ly-3).toFixed(1)}}"
+                fill="${{line.color}}" font-size="10.5" font-weight="700"
+                font-family="DM Sans,sans-serif">${{line.shortName}}</text>
+              <text x="${{xS(nDays-1)+18}}" y="${{(ly+9).toFixed(1)}}"
+                fill="${{gradeC}}" font-size="9.5"
+                font-family="IBM Plex Mono,monospace">${{pctStr}} [${{line.grade}}]</text>`;
           }}
         }}
       }});
 
-      // X 軸日期標籤
-      let xLabels="";
-      if(nDays>0){{
-        groupLines[0].points.forEach((p,i)=>{{
-          const x=xScale(i);
-          xLabels+=`<text x="${{x}}" y="${{cH+20}}" fill="#3d5470" font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">${{p.d}}</text>`;
-        }});
-      }}
-
-      // Y 軸零線
-      const y0=yScale(0);
-      const zeroLine=y0!=null?`<line x1="0" y1="${{y0.toFixed(1)}}" x2="${{cW}}" y2="${{y0.toFixed(1)}}" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4,3"/>`:"";;
-
-      chartEl.innerHTML=`<svg viewBox="0 0 ${{W}} ${{H}}" width="100%" height="${{H}}" xmlns="http://www.w3.org/2000/svg">
+      // ── 組裝 SVG ───────────────────────────────────────────────────────
+      chartEl.innerHTML=`
+      <svg viewBox="0 0 ${{W}} ${{H}}" width="100%" style="display:block;overflow:visible"
+           xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="chartClip">
+            <rect x="0" y="0" width="${{cW}}" height="${{cH}}"/>
+          </clipPath>
+        </defs>
         <g transform="translate(${{PL}},${{PT}})">
-          ${{zeroLine}}
-          ${{paths}}
-          ${{dots}}
+          <!-- 背景漲跌區 -->
+          ${{upZone}}${{downZone}}
+          <!-- 網格 -->
+          ${{gridLines}}
+          <!-- 淡線（後排） -->
+          <g clip-path="url(#chartClip)">${{pathsBg}}</g>
+          <!-- 亮線（前排） -->
+          <g clip-path="url(#chartClip)">${{pathsFg}}</g>
+          <!-- 端點 -->
+          ${{dotsFg}}
+          <!-- X 軸標籤 -->
           ${{xLabels}}
+          <!-- Y 軸標籤 -->
+          ${{yTickLabels}}
+          <!-- X 軸底線 -->
+          <line x1="0" y1="${{cH}}" x2="${{cW}}" y2="${{cH}}" stroke="rgba(255,255,255,0.06)"/>
+          <!-- Y 軸左線 -->
+          <line x1="0" y1="0" x2="0" y2="${{cH}}" stroke="rgba(255,255,255,0.06)"/>
         </g>
-        <g transform="translate(${{PL+cW+6}},${{PT}})">
-          ${{labels}}
-        </g>
+        <!-- 右側標籤（不受 clip） -->
+        <g transform="translate(${{PL}},${{PT}})">${{labelsFg}}</g>
       </svg>`;
     }}
   }}
@@ -633,16 +728,22 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
 
 /* ── 族群輪動圖 ────────────────────────────────────────────────────────── */
 .rotation-chart-wrap {
-  padding: 0 18px 14px;
+  padding: 0 18px 16px;
 }
 .chart-label {
   font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-  color:#22d3ee;margin-bottom:8px;
+  color:#22d3ee;margin-bottom:10px;display:flex;align-items:center;gap:8px;
+}
+.chart-label .chart-sub {
+  font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;
+  color:#3d5470;font-style:italic;
 }
 #rotation-chart {
-  background: linear-gradient(180deg,rgba(7,13,26,0.6) 0%,rgba(4,8,15,0.4) 100%);
-  border:1px solid rgba(255,255,255,0.06);border-radius:10px;
-  padding:12px 6px 4px;overflow:hidden;
+  background: #070d1a;
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px;
+  padding:8px 0 0 0;
+  overflow:visible;
 }
 
 /* ── 入場雷達 ──────────────────────────────────────────────────────────── */
@@ -698,8 +799,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     # 折線圖區塊
     chart_html = (
         '<div class="rotation-chart-wrap">'
-        '<div class="chart-label">📈 族群輪動時序圖 — 5日累計漲幅趨勢（各族群均值）</div>'
-        '<div id="rotation-chart"><div style="color:#3d5470;font-size:12px;padding:20px">計算中…</div></div>'
+        '<div class="chart-label">📈 族群輪動時序圖'
+        '<span class="chart-sub">5日累計漲幅趨勢 · 粗線=前4強族群 · 右側標示族群名與等級</span></div>'
+        '<div id="rotation-chart"><div style="color:#3d5470;font-size:12px;padding:24px;font-style:italic">計算中…</div></div>'
         "</div>"
     )
 
