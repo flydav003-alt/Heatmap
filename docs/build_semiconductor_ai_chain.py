@@ -292,7 +292,29 @@ def fmt_pct(value: float | None, digits: int = 2) -> str:
 
 
 def fmt_volume_lots(value: float | None) -> str:
+    """保留舊函數供 avg_vol20 等內部計算使用（張數）"""
     return "—" if value is None else f"{value / 1000:,.0f}"
+
+
+def fmt_turnover(volume_shares: float | None, price: float | None) -> str:
+    """
+    成交金額（億元）= 成交股數 × 收盤價 / 1_000_000_00
+    台股 1 張 = 1000 股，所以：
+      成交金額(元) = volume_shares × price
+      成交金額(億) = volume_shares × price / 1e8
+    顯示規則：
+      < 0.1億  → 顯示 "<0.1億"
+      < 10億   → 1位小數，如 "3.2億"
+      ≥ 10億   → 0位小數，如 "147億"
+    """
+    if volume_shares is None or price is None:
+        return "—"
+    amount_yi = volume_shares * price / 1e8
+    if amount_yi < 0.1:
+        return "<0.1億"
+    if amount_yi < 10:
+        return f"{amount_yi:.1f}億"
+    return f"{amount_yi:.0f}億"
 
 
 def trend_class(value: float | None) -> str:
@@ -635,10 +657,17 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
 def summarize_group(rows: list[StockRow]) -> dict[str, Any]:
     changes = [r.change_pct for r in rows if r.change_pct is not None]
     volumes = [r.volume_shares for r in rows if r.volume_shares is not None]
+    # 族群成交額（億）= Σ(股數 × 價格) / 1e8
+    turnover_yi = sum(
+        (r.volume_shares * r.price)
+        for r in rows
+        if r.volume_shares is not None and r.price is not None
+    ) / 1e8
     return {
-        "count":      len(rows),
-        "change_avg": sum(changes) / len(changes) if changes else None,
-        "volume_sum": sum(volumes) if volumes else None,
+        "count":       len(rows),
+        "change_avg":  sum(changes) / len(changes) if changes else None,
+        "volume_sum":  sum(volumes) if volumes else None,
+        "turnover_yi": turnover_yi,
     }
 
 
@@ -684,7 +713,7 @@ def make_table_rows(rows: list[StockRow]) -> str:
             f'<td class="c-role"><span class="role-tag">{html.escape(role)}</span></td>'
             f'<td class="num">{fmt_num(r.price, 2)}</td>'
             f'<td class="num {tc}">{fmt_pct(r.change_pct)}</td>'
-            f'<td class="num">{fmt_volume_lots(r.volume_shares)}</td>'
+            f'<td class="num">{fmt_turnover(r.volume_shares, r.price)}</td>'
             f'<td class="num">{fmt_num(r.capital_100m, 1)}</td>'
             f'<td class="num">{fmt_num(r.eps, 2)}</td>'
             f'<td class="num {ytc}">{fmt_pct(r.yoy)}</td>'
@@ -742,7 +771,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
                 f' style="--accent:{accent};--heat:{heat}">'
                 f'<div class="heat-name">{html.escape(group)}</div>'
                 f'<div class="stage-heat-change">{fmt_pct(g["change_avg"])}</div>'
-                f'<div class="stage-heat-volume">{fmt_volume_lots(g["volume_sum"])} 張</div>'
+                f'<div class="stage-heat-volume">{(lambda t: f"{t:.0f}億" if t>=10 else f"{t:.1f}億")(g["turnover_yi"])}</div>'
                 f'<div class="heat-grade" data-group="{html.escape(group)}"></div>'
                 f'</button>'
             )
@@ -789,7 +818,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
             f'<th class="al">角色</th>'
             f'<th class="sortable" data-sort="price">股價</th>'
             f'<th class="sortable" data-sort="change">漲跌幅</th>'
-            f'<th class="sortable" data-sort="volume">成交(張)</th>'
+            f'<th class="sortable" data-sort="volume">成交額(億)</th>'
             f'<th class="sortable" data-sort="capital">資本額(億)</th>'
             f'<th class="sortable" data-sort="eps">EPS</th>'
             f'<th class="sortable" data-sort="yoy">{meta["latest_revenue_month"]} YoY</th>'
@@ -808,6 +837,12 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     avg_change = sum(changes) / len(changes) if changes else None
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     avg_tc     = trend_class(avg_change)
+    # 總成交額（億）= Σ(成交股數 × 收盤價) / 1e8
+    total_turnover_yi = sum(
+        (r.volume_shares * r.price)
+        for r in rows
+        if r.volume_shares is not None and r.price is not None
+    ) / 1e8
 
     # ── Assemble final HTML ──────────────────────────────────────────────────
     return f"""<!DOCTYPE html>
@@ -1138,7 +1173,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       <div class="kpi"><div class="label">收錄檔數</div><div class="value">{len(rows)}</div></div>
       <div class="kpi"><div class="label">總資本額</div><div class="value">{fmt_num(total_cap, 0)}億</div></div>
       <div class="kpi"><div class="label">平均漲跌幅</div><div class="value {avg_tc}">{fmt_pct(avg_change)}</div></div>
-      <div class="kpi"><div class="label">總成交量</div><div class="value">{fmt_volume_lots(sum(volumes) if volumes else None)}張</div></div>
+      <div class="kpi"><div class="label">總成交額</div><div class="value">{fmt_turnover(sum(volumes) if volumes else None, 1.0) if False else (f"{total_turnover_yi:.0f}億" if total_turnover_yi >= 10 else f"{total_turnover_yi:.1f}億")}</div></div>
       <div class="kpi"><div class="label">更新時間</div><div class="value" style="font-size:13px">{updated_at[11:]}</div></div>
     </div>
   </header>
