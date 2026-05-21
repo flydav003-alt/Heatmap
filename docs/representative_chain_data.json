@@ -1,11 +1,10 @@
 {
-  "updated_at": "2026-05-21 07:10:37",
+  "updated_at": "2026-05-21 07:45:36",
   "latest_price_date": "2026-05-20",
   "themes": {
     "ASIC": {
       "avg_change_pct": 0.7858,
       "volume_lots": 21724.67,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "2454",
@@ -13,9 +12,9 @@
           "price": 3230.0,
           "change_pct": 2.3771790808240887,
           "volume_lots": 9296.11,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 12877.6218,
+          "p5_close": 3260.0,
+          "p20_high": 3880.0
         },
         {
           "code": "3443",
@@ -23,9 +22,9 @@
           "price": 4605.0,
           "change_pct": 3.135498320268757,
           "volume_lots": 3290.15,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2323.1319,
+          "p5_close": 4845.0,
+          "p20_high": 5730.0
         },
         {
           "code": "3035",
@@ -33,9 +32,9 @@
           "price": 189.5,
           "change_pct": 0.5305039787798408,
           "volume_lots": 7924.7,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 19261.6422,
+          "p5_close": 190.0,
+          "p20_high": 208.5
         },
         {
           "code": "5274",
@@ -43,9 +42,9 @@
           "price": 15560.0,
           "change_pct": -2.291993720565149,
           "volume_lots": 279.46,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 341.01465,
+          "p5_close": 17195.0,
+          "p20_high": 18700.0
         },
         {
           "code": "6643",
@@ -53,16 +52,15 @@
           "price": 563.0,
           "change_pct": 0.1779359430604982,
           "volume_lots": 934.24,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 1232.0012,
+          "p5_close": 619.0,
+          "p20_high": 697.0
         }
       ]
     },
     "CoWoS": {
       "avg_change_pct": -2.6253,
       "volume_lots": 6394.23,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "1560",
@@ -70,9 +68,9 @@
           "price": 609.0,
           "change_pct": -5.434782608695652,
           "volume_lots": 3079.07,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2950.4457,
+          "p5_close": 642.0,
+          "p20_high": 669.0
         },
         {
           "code": "3583",
@@ -80,9 +78,9 @@
           "price": 826.0,
           "change_pct": -1.9002375296912115,
           "volume_lots": 1583.88,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 3279.7561499999997,
+          "p5_close": 888.0,
+          "p20_high": 966.0
         },
         {
           "code": "6187",
@@ -90,9 +88,9 @@
           "price": 1085.0,
           "change_pct": -2.690582959641256,
           "volume_lots": 1030.52,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 3600.8188999999998,
+          "p5_close": 1125.0,
+          "p20_high": 1345.0
         },
         {
           "code": "6640",
@@ -100,9 +98,9 @@
           "price": 1250.0,
           "change_pct": -3.10077519379845,
           "volume_lots": 309.81,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 505.71835,
+          "p5_close": 1370.0,
+          "p20_high": 1505.0
         },
         {
           "code": "3131",
@@ -110,16 +108,15 @@
           "price": 2580.0,
           "change_pct": 0.0,
           "volume_lots": 390.94,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 787.8124,
+          "p5_close": 2870.0,
+          "p20_high": 3200.0
         }
       ]
     },
     "HBM": {
       "avg_change_pct": -2.2227,
       "volume_lots": 272095.03,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "2337",
@@ -127,9 +124,9 @@
           "price": 141.0,
           "change_pct": -2.083333333333333,
           "volume_lots": 112446.0,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 192094.4914,
+          "p5_close": 162.5,
+          "p20_high": 172.0
         },
         {
           "code": "2408",
@@ -137,9 +134,9 @@
           "price": 275.0,
           "change_pct": 0.18214936247723132,
           "volume_lots": 123868.2,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 143353.653,
+          "p5_close": 311.5,
+          "p20_high": 341.0
         },
         {
           "code": "8299",
@@ -147,9 +144,9 @@
           "price": 2265.0,
           "change_pct": -8.113590263691684,
           "volume_lots": 13617.63,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 10099.697900000001,
+          "p5_close": 2650.0,
+          "p20_high": 2880.0
         },
         {
           "code": "3260",
@@ -157,9 +154,9 @@
           "price": 405.5,
           "change_pct": 3.974358974358974,
           "volume_lots": 14745.69,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 30235.0357,
+          "p5_close": 425.0,
+          "p20_high": 484.0
         },
         {
           "code": "6531",
@@ -167,16 +164,15 @@
           "price": 973.0,
           "change_pct": -5.073170731707317,
           "volume_lots": 7417.52,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 7397.5328,
+          "p5_close": 1080.0,
+          "p20_high": 1135.0
         }
       ]
     },
     "CPO": {
       "avg_change_pct": 5.3354,
       "volume_lots": 6230.32,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "4979",
@@ -184,9 +180,9 @@
           "price": 562.0,
           "change_pct": 7.45697896749522,
           "volume_lots": 1115.26,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 5480.5938,
+          "p5_close": 531.0,
+          "p20_high": 718.0
         },
         {
           "code": "4908",
@@ -194,9 +190,9 @@
           "price": 247.0,
           "change_pct": 6.695464362850973,
           "volume_lots": 748.29,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 1527.35455,
+          "p5_close": 242.5,
+          "p20_high": 250.0
         },
         {
           "code": "3163",
@@ -204,9 +200,9 @@
           "price": 952.0,
           "change_pct": 5.777777777777778,
           "volume_lots": 635.33,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2964.34585,
+          "p5_close": 950.0,
+          "p20_high": 1255.0
         },
         {
           "code": "3450",
@@ -214,9 +210,9 @@
           "price": 413.5,
           "change_pct": 5.35031847133758,
           "volume_lots": 2160.29,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 16143.38235,
+          "p5_close": 395.5,
+          "p20_high": 470.5
         },
         {
           "code": "3596",
@@ -224,16 +220,15 @@
           "price": 181.5,
           "change_pct": 1.3966480446927374,
           "volume_lots": 1571.16,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 1742.96255,
+          "p5_close": 183.5,
+          "p20_high": 184.0
         }
       ]
     },
     "BBU": {
       "avg_change_pct": -0.2128,
       "volume_lots": 15741.78,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "2308",
@@ -241,9 +236,9 @@
           "price": 1915.0,
           "change_pct": 0.0,
           "volume_lots": 10890.05,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 11386.26945,
+          "p5_close": 2075.0,
+          "p20_high": 2280.0
         },
         {
           "code": "6409",
@@ -251,9 +246,9 @@
           "price": 668.0,
           "change_pct": -3.7463976945244957,
           "volume_lots": 927.51,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 988.4172,
+          "p5_close": 716.0,
+          "p20_high": 821.0
         },
         {
           "code": "6412",
@@ -261,9 +256,9 @@
           "price": 94.5,
           "change_pct": 2.494577006507592,
           "volume_lots": 3503.57,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 3666.54975,
+          "p5_close": 88.0999984741211,
+          "p20_high": 97.0999984741211
         },
         {
           "code": "6121",
@@ -271,16 +266,15 @@
           "price": 376.0,
           "change_pct": 0.4005340453938585,
           "volume_lots": 420.65,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 835.9736,
+          "p5_close": 368.0,
+          "p20_high": 394.0
         }
       ]
     },
     "伺服器": {
       "avg_change_pct": -0.4424,
       "volume_lots": 156432.67,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "2317",
@@ -288,9 +282,9 @@
           "price": 240.0,
           "change_pct": -2.0408163265306123,
           "volume_lots": 62650.29,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 94848.9924,
+          "p5_close": 248.5,
+          "p20_high": 253.5
         },
         {
           "code": "2382",
@@ -298,9 +292,9 @@
           "price": 290.0,
           "change_pct": 0.0,
           "volume_lots": 36185.74,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 24236.2063,
+          "p5_close": 306.0,
+          "p20_high": 346.5
         },
         {
           "code": "3231",
@@ -308,9 +302,9 @@
           "price": 132.5,
           "change_pct": 0.0,
           "volume_lots": 20642.9,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 43557.6266,
+          "p5_close": 135.5,
+          "p20_high": 146.5
         },
         {
           "code": "6669",
@@ -318,9 +312,9 @@
           "price": 4910.0,
           "change_pct": 0.408997955010225,
           "volume_lots": 1739.87,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2519.35645,
+          "p5_close": 5115.0,
+          "p20_high": 5790.0
         },
         {
           "code": "2356",
@@ -328,16 +322,15 @@
           "price": 51.4,
           "change_pct": -0.5802707930367506,
           "volume_lots": 35213.87,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 40178.011549999996,
+          "p5_close": 52.20000076293945,
+          "p20_high": 54.099998474121094
         }
       ]
     },
     "散熱": {
       "avg_change_pct": -2.052,
       "volume_lots": 12763.62,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "3017",
@@ -345,9 +338,9 @@
           "price": 2340.0,
           "change_pct": -2.092050209205021,
           "volume_lots": 3568.97,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 5481.84995,
+          "p5_close": 2455.0,
+          "p20_high": 2945.0
         },
         {
           "code": "3324",
@@ -355,9 +348,9 @@
           "price": 939.0,
           "change_pct": -2.7950310559006213,
           "volume_lots": 3038.79,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 4312.1588,
+          "p5_close": 995.0,
+          "p20_high": 1215.0
         },
         {
           "code": "2421",
@@ -365,9 +358,9 @@
           "price": 143.0,
           "change_pct": -1.3793103448275863,
           "volume_lots": 4680.77,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 5372.665150000001,
+          "p5_close": 140.0,
+          "p20_high": 152.0
         },
         {
           "code": "3653",
@@ -375,16 +368,15 @@
           "price": 3030.0,
           "change_pct": -1.9417475728155338,
           "volume_lots": 1475.09,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 1315.15665,
+          "p5_close": 3465.0,
+          "p20_high": 5445.0
         }
       ]
     },
     "載板PCB": {
       "avg_change_pct": -0.823,
       "volume_lots": 43660.31,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "3037",
@@ -392,9 +384,9 @@
           "price": 823.0,
           "change_pct": 0.6112469437652812,
           "volume_lots": 21306.14,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 26367.3952,
+          "p5_close": 821.0,
+          "p20_high": 911.0
         },
         {
           "code": "8046",
@@ -402,9 +394,9 @@
           "price": 829.0,
           "change_pct": 3.8847117794486214,
           "volume_lots": 12893.09,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 17695.24745,
+          "p5_close": 786.0,
+          "p20_high": 1005.0
         },
         {
           "code": "2383",
@@ -412,9 +404,9 @@
           "price": 4395.0,
           "change_pct": -3.0871003307607494,
           "volume_lots": 1950.33,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2895.53235,
+          "p5_close": 4615.0,
+          "p20_high": 4960.0
         },
         {
           "code": "2368",
@@ -422,9 +414,9 @@
           "price": 1235.0,
           "change_pct": -3.8910505836575875,
           "volume_lots": 5873.75,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 6175.93935,
+          "p5_close": 1290.0,
+          "p20_high": 1480.0
         },
         {
           "code": "6274",
@@ -432,16 +424,15 @@
           "price": 1205.0,
           "change_pct": -1.6326530612244898,
           "volume_lots": 1637.01,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 4583.23965,
+          "p5_close": 1305.0,
+          "p20_high": 1455.0
         }
       ]
     },
     "低軌衛星": {
       "avg_change_pct": 0.6018,
       "volume_lots": 50760.34,
-      "avg_vol20": 0.0,
       "stocks": [
         {
           "code": "3491",
@@ -449,9 +440,9 @@
           "price": 1755.0,
           "change_pct": -0.56657223796034,
           "volume_lots": 2894.7,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2372.8757,
+          "p5_close": 1690.0,
+          "p20_high": 1855.0
         },
         {
           "code": "7717",
@@ -459,9 +450,9 @@
           "price": 674.0,
           "change_pct": -1.3177159590043925,
           "volume_lots": 639.97,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 598.52305,
+          "p5_close": 606.0,
+          "p20_high": 796.0
         },
         {
           "code": "2485",
@@ -469,9 +460,9 @@
           "price": 70.6,
           "change_pct": -2.4861878453038675,
           "volume_lots": 42881.2,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 39762.202950000006,
+          "p5_close": 68.30000305175781,
+          "p20_high": 73.0
         },
         {
           "code": "3138",
@@ -479,9 +470,9 @@
           "price": 163.0,
           "change_pct": -2.3952095808383236,
           "volume_lots": 2958.34,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 2181.9005,
+          "p5_close": 148.5,
+          "p20_high": 173.5
         },
         {
           "code": "2314",
@@ -489,9 +480,9 @@
           "price": 14.6,
           "change_pct": 9.774436090225565,
           "volume_lots": 1386.12,
-          "avg_vol20": null,
-          "p5_close": null,
-          "p20_high": null
+          "avg_vol_20": 472.82865000000004,
+          "p5_close": 12.350000381469727,
+          "p20_high": 16.700000762939453
         }
       ]
     }
