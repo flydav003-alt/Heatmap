@@ -3,7 +3,6 @@ name: Update Static Heatmap Data
 on:
   workflow_dispatch:
   schedule:
-    # 台灣時間每天 18:00（UTC 10:00），週一到週五收盤後更新財報/月營收/EPS
     - cron: "0 10 * * 1-5"
 
 jobs:
