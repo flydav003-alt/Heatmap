@@ -13,13 +13,11 @@ import time
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-import yfinance as yf
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
@@ -33,6 +31,15 @@ if str(VENDOR) not in sys.path:
     sys.path.insert(0, str(VENDOR))
 
 import xlrd  # type: ignore
+
+# yfinance import (installed at runtime via pip install yfinance)
+try:
+    import yfinance as yf  # type: ignore
+    HAS_YF = True
+except ImportError:
+    HAS_YF = False
+    print("WARNING: yfinance not installed. Historical dataset attributes will be skipped.")
+
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -70,6 +77,7 @@ def _find_otc_revenue_url() -> str | None:
         except Exception as exc:
             print(f"OTC revenue {ym}: error ({exc}), skipping")
     return None
+
 
 # ── Static config ─────────────────────────────────────────────────────────────
 RELEVANT_LISTED_INDUSTRIES = {"半導體業"}
@@ -132,36 +140,39 @@ MANUAL_GROUPS = {
     "IC設計 / IP / ASIC": [
         "2454", "3035", "3034", "2379", "3443", "3661", "6526", "4961", "5269", "6415",
         "3529", "4919", "2401", "3041", "3592", "3545", "3227", "8081", "8016", "5274",
-        "2363", "6643", "8227", "6533", "2388", "2458", "3014", "3094", "3122", "3135", 
-        "3141", "3169", "3228", "3259", "3317", "3438", "3527", "3530", "3556", "3588", 
-        "4952", "4968", "5236", "5272", "5471", "6103", "6104", "6129", "6138", "6202", 
-        "6229", "6233", "6237", "6243", "6291", "6462", "6485", "6494", "6651", "6679", 
-        "6684", "6693", "6695", "6708", "6716", "6756", "6799", "6909", "6962", "6996", 
-        "7556", "8054", "8277",
+        "2363", "6643", "8227", "6533",
+        "2388", "2458", "3014", "3094", "3122", "3135", "3141", "3169", "3228", "3259",
+        "3317", "3438", "3527", "3530", "3556", "3588", "4952", "4968", "5236", "5272",
+        "5471", "6103", "6104", "6129", "6138", "6202", "6229", "6233", "6237", "6243",
+        "6291", "6462", "6485", "6494", "6651", "6679", "6684", "6693", "6695", "6708",
+        "6716", "6756", "6799", "6909", "6962", "6996", "7556", "8054", "8277",
     ],
     "晶圓代工 / 功率半導體": [
         "2330", "2303", "5347", "6770", "2344", "2481", "8261", "3707", "5425", "6435",
-        "3675", "5299", "6719", "2302", "2329", "2340", "2342", "3105", "3686", "4923", 
-        "6552", "6937", "7712", "8086", "8162",
+        "3675", "5299", "6719",
+        "2302", "2329", "2340", "2342", "3105", "3686", "4923", "6552", "6937", "7712",
+        "8086", "8162",
     ],
     "先進封裝 / CoWoS": [
         "1560", "3583", "6187", "6640", "3131", "3551", "3413", "8028", "4770", "3016",
-        "5536", "5543", "3663", "6953", "2338", "3374", "3467", "6261", "6548", "6854",
+        "5536", "5543", "3663", "6953",
+        "2338", "3374", "3467", "6261", "6548", "6854",
     ],
     "封測 / 測試介面": [
         "3711", "2449", "6239", "6147", "3264", "6510", "6223", "6515", "2360", "6271",
-        "8150", "6257", "8110", "8131", "3265", "6683", "6788", "7734", "2351", "2369", 
-        "2434", "2441", "3178", "3372", "3581", "5302", "5344", "6208", "6411", "6423", 
-        "6525", "7768", "7822", "8383",
+        "8150", "6257", "8110", "8131", "3265", "6683", "6788", "7734",
+        "2351", "2369", "2434", "2441", "3178", "3372", "3581", "5302", "5344", "6208",
+        "6411", "6423", "6525", "7768", "7822", "8383",
     ],
     "記憶體 / HBM": [
         "2337", "2408", "3006", "2451", "4967", "8271", "8299", "3260", "6531", "8088",
-        "3268", "6732", "4973", "5351", "8040",
+        "3268", "6732",
+        "4973", "5351", "8040",
     ],
     "矽晶圓 / 材料設備 / 廠務": [
-        "6488", "3532", "6182", "5483", "3680", "4749", "6532", "8091", "3029", "3150", 
-        "3555", "3567", "4951", "5443", "6573", "6720", "6823", "6829", "6895", "6921", 
-        "7704", "7749", "7751", "7769", "7810", "8024", "8102",
+        "6488", "3532", "6182", "5483", "3680", "4749", "6532", "8091", "3029",
+        "3150", "3555", "3567", "4951", "5443", "6573", "6720", "6823", "6829", "6895",
+        "6921", "7704", "7749", "7751", "7769", "7810", "8024", "8102",
     ],
     "PCB / 載板 / CCL": [
         "3037", "8046", "3189", "2383", "2368", "6274", "4958", "6269", "2313", "6191",
@@ -172,14 +183,16 @@ MANUAL_GROUPS = {
         "6414", "6166", "3088", "8050", "3022", "3416", "2324",
     ],
     "散熱": [
-        "3017", "3324", "2421", "3653", "4931", "3257",
+        "3017", "3324", "2421", "3653", "4931",
+        "3257",
     ],
     "電源 / BBU": [
         "2308", "6409", "6412", "6282", "6121", "3211",
     ],
     "網通 / 光通訊 / CPO": [
         "2345", "5388", "3596", "6285", "4906", "3450", "4979", "3163", "3363", "3081",
-        "4908", "6442", "6451", "5222", "5487", "7770", "7772",
+        "4908", "6442", "6451",
+        "5222", "5487", "7770", "7772",
     ],
     "高速互連 / 連接器 / 線材": [
         "3023", "3665", "6279", "6205", "3217", "3376", "6805",
@@ -214,10 +227,10 @@ class StockRow:
     yoy: float | None
     mom: float | None
     scope: str
-    # 新增預計算指標屬性
-    avg_vol_20: float | None = None
-    p5_close: float | None = None
-    p20_high: float | None = None
+    # ── New historical attributes (added in v2) ──────────────────────────────
+    avg_vol20: float | None = field(default=None)    # 過去20日平均成交張數
+    p5_close: float | None = field(default=None)     # 5日前收盤價
+    p20_high: float | None = field(default=None)     # 過去20日最高收盤價
 
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
@@ -306,6 +319,91 @@ def roc_date_to_ad(roc_date: str) -> str:
     return roc_date if len(roc_date) < 7 else f"{int(roc_date[:3]) + 1911}-{roc_date[3:5]}-{roc_date[5:7]}"
 
 
+# ── Historical data via yfinance batch download ────────────────────────────────
+def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict[str, float | None]]:
+    """
+    批次下載所有個股近1個月日K，計算三個歷史指標。
+    使用 yf.download(group_by='ticker') 一次性下載，避免逐一 rate-limit。
+    回傳 {code: {avg_vol20, p5_close, p20_high}}
+    """
+    if not HAS_YF:
+        return {}
+
+    # 先嘗試 .TW 後綴，再嘗試 .TWO
+    # 組合 ticker 清單：每個 code 都嘗試兩個後綴
+    tw_tickers  = [f"{c}.TW"  for c in all_codes]
+    two_tickers = [f"{c}.TWO" for c in all_codes]
+    all_tickers = tw_tickers + two_tickers
+
+    print(f"[yf] 批次下載 {len(all_tickers)} 個 ticker 近1個月日K…")
+    result: dict[str, dict[str, float | None]] = {}
+
+    try:
+        # 一次性批次下載，避免 rate limit
+        raw = yf.download(
+            tickers=all_tickers,
+            period="1mo",
+            group_by="ticker",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+    except Exception as exc:
+        print(f"[yf] 批次下載失敗: {exc}")
+        return {}
+
+    import pandas as pd  # type: ignore
+
+    def _extract(ticker: str) -> dict[str, float | None] | None:
+        try:
+            if len(all_tickers) == 1:
+                df = raw
+            elif ticker in raw.columns.get_level_values(0):
+                df = raw[ticker]
+            else:
+                return None
+
+            if df is None or df.empty:
+                return None
+
+            close = df["Close"].dropna()
+            volume = df["Volume"].dropna()
+
+            if len(close) < 2:
+                return None
+
+            # avg_vol20: 過去20日平均成交張數（Yahoo volume 是股，除以1000換算張）
+            vol_series = volume.tail(20)
+            avg_vol20 = float(vol_series.mean() / 1000) if len(vol_series) >= 1 else None
+
+            # p5_close: 5個交易日前的收盤價
+            if len(close) >= 6:
+                p5_close = float(close.iloc[-6])
+            elif len(close) >= 2:
+                p5_close = float(close.iloc[0])
+            else:
+                p5_close = None
+
+            # p20_high: 過去20日最高收盤價
+            high_series = close.tail(20)
+            p20_high = float(high_series.max()) if len(high_series) >= 1 else None
+
+            return {"avg_vol20": avg_vol20, "p5_close": p5_close, "p20_high": p20_high}
+        except Exception:
+            return None
+
+    # 優先取 .TW，fallback 到 .TWO
+    for code in all_codes:
+        attrs = _extract(f"{code}.TW")
+        if attrs is None:
+            attrs = _extract(f"{code}.TWO")
+        if attrs is not None:
+            result[code] = attrs
+
+    print(f"[yf] 成功取得 {len(result)}/{len(all_codes)} 檔歷史指標")
+    return result
+
+
 # ── Data fetching ──────────────────────────────────────────────────────────────
 def load_listed_prices() -> tuple[dict[str, dict[str, Any]], str]:
     rows = fetch_json(LISTED_PRICE_URL)
@@ -370,7 +468,7 @@ def load_otc_prices() -> tuple[dict[str, dict[str, Any]], str]:
 def load_otc_revenue() -> tuple[dict[str, dict[str, Any]], set[str], str]:
     url = _find_otc_revenue_url()
     if url is None:
-        print("OTC revenue: no valid XLS found, skipping (revenue/YoY/MoM will be empty for OTC stocks)")
+        print("OTC revenue: no valid XLS found, skipping")
         return {}, set(), ""
     raw = fetch_bytes(url)
     fd, path = tempfile.mkstemp(suffix=".xls")
@@ -435,67 +533,6 @@ def load_listed_financial(code: str) -> dict[str, Any]:
     cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     return result
 
-# ── 核心預計算引擎：獲取歷史量價資料 ─────────────────────────────────────────────
-def compute_historical_metrics(listed_codes: set[str], otc_codes: set[str]) -> dict[str, dict[str, float]]:
-    """
-    使用 yf.download 批次下載近 1 個月的資料，
-    為每檔個股預計算：20日均量、5日前收盤價、20日高點
-    """
-    print(f"開始批次預計算歷史量價，上市: {len(listed_codes)} 檔，上櫃: {len(otc_codes)} 檔...")
-    
-    tickers = []
-    ticker_to_code = {}
-    
-    for code in listed_codes:
-        t = f"{code}.TW"
-        tickers.append(t)
-        ticker_to_code[t] = code
-        
-    for code in otc_codes:
-        t = f"{code}.TWO"
-        tickers.append(t)
-        ticker_to_code[t] = code
-
-    metrics: dict[str, dict[str, float]] = {}
-    
-    try:
-        # 單次請求拉回所有歷史K線，避免 Rate Limit
-        df = yf.download(tickers, period="1mo", group_by="ticker", progress=False)
-        is_multi = isinstance(df.columns, pd.MultiIndex) if not df.empty else False
-        
-        for t in tickers:
-            code = ticker_to_code[t]
-            metrics[code] = {"avg_vol_20": None, "p5_close": None, "p20_high": None}
-            
-            if is_multi and (t, "Close") in df.columns:
-                close_series = df[(t, "Close")].dropna()
-                if (t, "Volume") in df.columns:
-                    vol_series = df[(t, "Volume")].dropna()
-                else:
-                    vol_series = pd.Series()
-                
-                # 計算 20日均量 (以張為單位)
-                if len(vol_series) >= 20:
-                    metrics[code]["avg_vol_20"] = float(vol_series[-20:].mean() / 1000.0)
-                elif len(vol_series) > 0:
-                    metrics[code]["avg_vol_20"] = float(vol_series.mean() / 1000.0)
-                    
-                # 計算 5日前收盤價 (p5_close)
-                if len(close_series) >= 5:
-                    metrics[code]["p5_close"] = float(close_series.iloc[-5])
-                elif len(close_series) > 0:
-                    metrics[code]["p5_close"] = float(close_series.iloc[0]) # 退而求其次取最舊一筆
-                    
-                # 計算 20日最高價 (p20_high)
-                if len(close_series) >= 20:
-                    metrics[code]["p20_high"] = float(close_series[-20:].max())
-                elif len(close_series) > 0:
-                    metrics[code]["p20_high"] = float(close_series.max())
-    except Exception as e:
-        print(f"歷史量價預計算發生錯誤: {e}")
-        
-    return metrics
-
 
 def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
     ensure_dirs()
@@ -511,16 +548,11 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
 
     listed_semi_codes = {code for code, row in listed_revenue.items() if row.get("industry") in RELEVANT_LISTED_INDUSTRIES}
     selected_codes    = listed_semi_codes | otc_semi_codes | set(GROUP_BY_CODE)
-    
-    actual_listed = {code for code in selected_codes if code in listed_prices}
-    actual_otc    = {code for code in selected_codes if code in otc_prices}
-
-    # 取得歷史預計算指標
-    historical_metrics = compute_historical_metrics(actual_listed, actual_otc)
+    listed_codes      = sorted(code for code in selected_codes if code in listed_prices)
 
     listed_financial: dict[str, dict[str, Any]] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-        futures = {pool.submit(load_listed_financial, code): code for code in actual_listed}
+        futures = {pool.submit(load_listed_financial, code): code for code in listed_codes}
         for future in concurrent.futures.as_completed(futures):
             code = futures[future]
             try:
@@ -528,43 +560,49 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
             except Exception:
                 listed_financial[code] = {"code": code, "name": listed_prices.get(code, {}).get("name", code), "capital_amt": None, "eps": None}
 
+    # ── 批次下載歷史日K（一次性，避免 rate limit）────────────────────────────
+    all_codes_list = sorted(selected_codes)
+    hist_attrs = fetch_historical_attrs(all_codes_list)
+
     rows: list[StockRow] = []
     for code in sorted(selected_codes):
-        market      = "上市" if code in listed_prices else ("上櫃" if code in otc_prices else "未知")
-        if market == "未知": continue
-        
+        market      = "上市" if code in listed_prices else "上櫃"
         is_core_semi = code in listed_semi_codes or code in otc_semi_codes
         group       = GROUP_BY_CODE.get(code) or ("半導體其他" if is_core_semi else None)
         if not group:
             continue
         stage = GROUP_META[group]["stage"]
-        
-        # 取出預計算指標
-        hm = historical_metrics.get(code, {})
-        avg_vol_20 = hm.get("avg_vol_20")
-        p5_close   = hm.get("p5_close")
-        p20_high   = hm.get("p20_high")
-        
+
+        # 歷史指標（可能為 None，若 yfinance 無資料）
+        h = hist_attrs.get(code, {})
+        avg_vol20 = h.get("avg_vol20")
+        p5_close  = h.get("p5_close")
+        p20_high  = h.get("p20_high")
+
         if market == "上市":
             px, rev, fin = listed_prices.get(code, {}), listed_revenue.get(code, {}), listed_financial.get(code, {})
             capital_amt  = parse_float(fin.get("capital_amt"))
-            rows.append(StockRow(code, str(fin.get("name") or px.get("name") or code), market, group, stage,
-                                 parse_float(px.get("price")), parse_float(px.get("change_pct")),
-                                 parse_float(px.get("volume_shares")),
-                                 capital_amt / 100_000_000 if capital_amt is not None else None,
-                                 parse_float(fin.get("eps")), parse_float(rev.get("yoy")), parse_float(rev.get("mom")),
-                                 "官方半導體全覆蓋" if is_core_semi else "AI延伸硬體鏈",
-                                 avg_vol_20, p5_close, p20_high))
+            rows.append(StockRow(
+                code, str(fin.get("name") or px.get("name") or code), market, group, stage,
+                parse_float(px.get("price")), parse_float(px.get("change_pct")),
+                parse_float(px.get("volume_shares")),
+                capital_amt / 100_000_000 if capital_amt is not None else None,
+                parse_float(fin.get("eps")), parse_float(rev.get("yoy")), parse_float(rev.get("mom")),
+                "官方半導體全覆蓋" if is_core_semi else "AI延伸硬體鏈",
+                avg_vol20=avg_vol20, p5_close=p5_close, p20_high=p20_high,
+            ))
         else:
             px, rev      = otc_prices.get(code, {}), otc_revenue.get(code, {})
             capital_million = parse_float(otc_cap_million.get(code))
-            rows.append(StockRow(code, str(px.get("name") or code), market, group, stage,
-                                 parse_float(px.get("price")), parse_float(px.get("change_pct")),
-                                 parse_float(px.get("volume_shares")),
-                                 capital_million / 100 if capital_million is not None else None,
-                                 parse_float(otc_eps.get(code)), parse_float(rev.get("yoy")), parse_float(rev.get("mom")),
-                                 "官方半導體全覆蓋" if is_core_semi else "AI延伸硬體鏈",
-                                 avg_vol_20, p5_close, p20_high))
+            rows.append(StockRow(
+                code, str(px.get("name") or code), market, group, stage,
+                parse_float(px.get("price")), parse_float(px.get("change_pct")),
+                parse_float(px.get("volume_shares")),
+                capital_million / 100 if capital_million is not None else None,
+                parse_float(otc_eps.get(code)), parse_float(rev.get("yoy")), parse_float(rev.get("mom")),
+                "官方半導體全覆蓋" if is_core_semi else "AI延伸硬體鏈",
+                avg_vol20=avg_vol20, p5_close=p5_close, p20_high=p20_high,
+            ))
 
     meta = {
         "latest_price_date":    latest_price_date,
@@ -585,10 +623,13 @@ def summarize_group(rows: list[StockRow]) -> dict[str, Any]:
         "volume_sum": sum(volumes) if volumes else None,
     }
 
+
 def make_table_rows(rows: list[StockRow]) -> str:
     """
-    寫入 HTML dataset 屬性供前端動態腳本運算。
-    包含新增的 data-avg-vol, data-p5-close, data-p20-high
+    IMPORTANT: td.num order must be price[0], change_pct[1], volume[2]
+    so that streamlit_app.py's inject_live_script can update them by index.
+    Historical dataset attrs (avg-vol20, p5-close, p20-high) are embedded
+    for the JS rotation engine to consume.
     """
     out = []
     for r in rows:
@@ -599,22 +640,21 @@ def make_table_rows(rows: list[StockRow]) -> str:
         eps = "" if r.eps          is None else r.eps
         yoy = "" if r.yoy          is None else r.yoy
         mom = "" if r.mom          is None else r.mom
-        
-        # 預計算歷史屬性
-        avg_v = "" if r.avg_vol_20 is None else round(r.avg_vol_20, 2)
-        p5_c  = "" if r.p5_close   is None else round(r.p5_close, 2)
-        p20_h = "" if r.p20_high   is None else round(r.p20_high, 2)
-        
         tc  = trend_class(r.change_pct)
         ytc = trend_class(r.yoy)
         mtc = trend_class(r.mom)
         role = r.group.split(" / ")[-1] if " / " in r.group else r.group
-        
+
+        # Historical dataset attributes (empty string if None → JS skips safely)
+        avg_vol20 = "" if r.avg_vol20 is None else round(r.avg_vol20, 2)
+        p5_close  = "" if r.p5_close  is None else round(r.p5_close,  2)
+        p20_high  = "" if r.p20_high  is None else round(r.p20_high,  2)
+
         out.append(
             f'<tr data-code="{r.code}" data-name="{html.escape(r.name)}" data-group="{html.escape(r.group)}"'
             f' data-price="{p}" data-change="{ch}" data-volume="{vol}"'
             f' data-capital="{cap}" data-eps="{eps}" data-yoy="{yoy}" data-mom="{mom}"'
-            f' data-avg-vol="{avg_v}" data-p5-close="{p5_c}" data-p20-high="{p20_h}">'
+            f' data-avg-vol20="{avg_vol20}" data-p5-close="{p5_close}" data-p20-high="{p20_high}">'
             f'<td class="c-code">'
             f'<a class="sym" href="https://tw.stock.yahoo.com/quote/{r.code}.{"TWO" if r.market == "上櫃" else "TW"}" target="_blank" rel="noopener">{r.code}</a>'
             f'<span class="mkt-badge">{r.market}</span>'
@@ -642,23 +682,22 @@ def build_representative_payload(rows: list[StockRow], meta: dict[str, Any]) -> 
             continue
         changes = [p.change_pct for p in picks if p.change_pct is not None]
         vol_sum = sum((p.volume_shares or 0) for p in picks)
-        
         themes[theme] = {
             "avg_change_pct": round(sum(changes) / len(changes), 4) if changes else None,
             "volume_lots":    round(vol_sum / 1000, 2),
+            "avg_vol20":      round(sum(p.avg_vol20 or 0 for p in picks) / len(picks), 2) if picks else None,
             "stocks": [{"code": p.code, "name": p.name, "price": p.price,
                         "change_pct": p.change_pct,
                         "volume_lots": round((p.volume_shares or 0) / 1000, 2),
-                        "avg_vol_20": p.avg_vol_20,
-                        "p5_close": p.p5_close,
-                        "p20_high": p.p20_high
-                        } for p in picks],
+                        "avg_vol20": p.avg_vol20,
+                        "p5_close":  p.p5_close,
+                        "p20_high":  p.p20_high} for p in picks],
         }
     return {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "latest_price_date": meta["latest_price_date"], "themes": themes}
 
 
-# ── HTML generation ───────────────────────────────────────────────────────────
+# ── HTML generation ────────────────────────────────────────────────────────────
 def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     grouped: dict[str, list[StockRow]] = defaultdict(list)
     for row in rows:
@@ -682,6 +721,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
                 f'<div class="heat-name">{html.escape(group)}</div>'
                 f'<div class="stage-heat-change">{fmt_pct(g["change_avg"])}</div>'
                 f'<div class="stage-heat-volume">{fmt_volume_lots(g["volume_sum"])} 張</div>'
+                f'<div class="heat-grade" data-group="{html.escape(group)}"></div>'
                 f'</button>'
             )
         stage_parts.append(
@@ -715,7 +755,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
             f'<h2 class="g-name">{html.escape(group)}</h2>'
             f'</div>'
             f'<div class="g-right">'
-            f'<span class="group-chip {tc}">{fmt_pct(s["change_avg"])}</span>'
+            f'<span class="group-chip {tc}" data-group="{html.escape(group)}">{fmt_pct(s["change_avg"])}</span>'
             f'<span class="g-count">{s["count"]} 檔</span>'
             f'</div>'
             f'</div>'
@@ -739,6 +779,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
             f'</section>'
         )
 
+    # ── Summary stats ────────────────────────────────────────────────────────
     total_cap  = sum(r.capital_100m or 0 for r in rows)
     changes    = [r.change_pct for r in rows if r.change_pct is not None]
     volumes    = [r.volume_shares for r in rows if r.volume_shares is not None]
@@ -746,12 +787,13 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     avg_tc     = trend_class(avg_change)
 
+    # ── Assemble final HTML ──────────────────────────────────────────────────
     return f"""<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>台灣半導體 × AI 產業鏈</title>
+  <title>台灣半導體 × AI 產業鏈｜智慧輪動儀表板</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -772,6 +814,11 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       --up:       #ff2d54;
       --down:     #00d26e;
       --flat:     #f0b429;
+      --grade-a:  #ff2d54;
+      --grade-b:  #f59e0b;
+      --grade-c:  #a855f7;
+      --grade-d:  #3d5470;
+      --grade-e:  #00d26e;
     }}
 
     html {{ height: 100%; }}
@@ -795,6 +842,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
 
     .wrap {{ max-width: 1680px; margin: 0 auto; padding: 16px 18px 24px; }}
 
+    /* ── Header ────────────────────────────────────────────────────────────── */
     .header {{
       display: flex; justify-content: space-between; align-items: flex-start;
       gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
@@ -819,6 +867,61 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       font-size: 17px; font-weight: 600; margin-top: 5px; line-height: 1;
     }}
 
+    /* ── Rotation Panel ────────────────────────────────────────────────────── */
+    .rotation-panel {{
+      background: linear-gradient(135deg, rgba(34,211,238,0.04) 0%, rgba(139,92,246,0.04) 100%);
+      border: 1px solid rgba(34,211,238,0.18);
+      border-radius: 14px; padding: 14px 18px; margin-bottom: 14px;
+    }}
+    .rotation-panel-title {{
+      font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
+      margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+    }}
+    .rotation-panel-title::after {{
+      content: ''; flex: 1; height: 1px; background: rgba(34,211,238,0.15);
+    }}
+    #rotationBadges {{
+      display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px;
+      align-items: center;
+    }}
+    #rotationBadges .r-empty {{
+      font-size: 12px; color: var(--muted); font-style: italic;
+    }}
+
+    /* Grade badges */
+    .r-badge {{
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 8px; padding: 5px 11px;
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600;
+      border: 1px solid; white-space: nowrap; line-height: 1;
+    }}
+    .r-badge.grade-a {{ background: rgba(255,45,84,0.12);  border-color: rgba(255,45,84,0.4);  color: #ff6680; }}
+    .r-badge.grade-b {{ background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: #fbbf24; }}
+    .r-badge.grade-c {{ background: rgba(168,85,247,0.12); border-color: rgba(168,85,247,0.4); color: #c084fc; }}
+    .r-badge .r-sub {{ font-size: 10px; opacity: 0.75; }}
+
+    /* ── Warning box ───────────────────────────────────────────────────────── */
+    #warningBox {{
+      display: none;
+      background: linear-gradient(135deg, rgba(220,38,38,0.18) 0%, rgba(185,28,28,0.12) 100%);
+      border: 1px solid rgba(239,68,68,0.5); border-left: 4px solid #ef4444;
+      border-radius: 12px; padding: 14px 18px; margin-bottom: 14px;
+      animation: pulse-warn 2s infinite;
+    }}
+    @keyframes pulse-warn {{
+      0%, 100% {{ box-shadow: 0 0 0 0 rgba(239,68,68,0.2); }}
+      50%       {{ box-shadow: 0 0 18px 4px rgba(239,68,68,0.25); }}
+    }}
+    #warningBox .warn-title {{
+      font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+      color: #fca5a5; letter-spacing: 0.02em;
+    }}
+    #warningBox .warn-body {{
+      font-size: 12px; color: #fca5a580; margin-top: 4px;
+    }}
+
+    /* ── Pills ─────────────────────────────────────────────────────────────── */
     .pills {{ display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }}
     .pill {{
       background: transparent; border: 1px solid var(--border2);
@@ -830,6 +933,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     .pill:hover {{ border-color: var(--accent); color: var(--accent); }}
     .pill.active {{ background: var(--acc-bg); border-color: var(--accent); color: var(--accent); }}
 
+    /* ── Stage heatmap ─────────────────────────────────────────────────────── */
     .stage-map {{ display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }}
     .stage-row {{
       display: grid; grid-template-columns: 46px 18px 1fr;
@@ -869,7 +973,12 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       font-size: 22px; font-weight: 600; line-height: 1;
     }}
     .stage-heat-volume {{ font-size: 11px; color: var(--text2); margin-top: 7px; }}
+    .heat-grade {{
+      margin-top: 6px; font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    }}
 
+    /* ── Toolbar ────────────────────────────────────────────────────────────── */
     .toolbar {{
       position: sticky; top: 0; z-index: 50;
       display: flex; gap: 10px; align-items: center;
@@ -896,12 +1005,13 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       background: var(--s2); border: 1px solid var(--border2);
       border-radius: 8px; color: var(--text2);
       font-family: inherit; font-size: 12px; font-weight: 500;
-      padding: 7px 12px; cursor: pointer; text-decoration: none;
+      padding: 7px 12px; cursor: pointer;
       transition: all 0.12s;
     }}
     .t-btn:hover {{ border-color: var(--accent); color: var(--accent); }}
     .toolbar-meta {{ font-size: 11px; color: var(--text2); }}
 
+    /* ── Group cards ────────────────────────────────────────────────────────── */
     .group-card {{
       background: var(--s1);
       border: 1px solid var(--border);
@@ -924,15 +1034,23 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       font-family: 'Syne', sans-serif;
       font-size: 15px; font-weight: 700;
     }}
-    .g-right {{ display: flex; align-items: center; gap: 10px; }}
+    .g-right {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
     .group-chip {{
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 15px; font-weight: 600;
+      font-size: 13px; font-weight: 600;
       padding: 4px 10px; border-radius: 6px;
       background: rgba(255,255,255,0.05);
     }}
+    .group-rotation-info {{
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px; color: var(--text2);
+      padding: 3px 8px; border-radius: 5px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+    }}
     .g-count {{ font-size: 12px; color: var(--text2); }}
 
+    /* ── Stock table ────────────────────────────────────────────────────────── */
     .tbl-wrap {{ overflow-x: auto; }}
     .stock-table {{ width: 100%; min-width: 940px; border-collapse: collapse; }}
     .stock-table thead th {{
@@ -988,10 +1106,11 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
 <body>
 <div class="wrap">
 
+  <!-- Header -->
   <header class="header">
     <div class="brand">
       <h1>台灣半導體 <em>×</em> AI 產業鏈</h1>
-      <div class="brand-sub">Taiwan Semiconductor &amp; AI Supply Chain · 台股 紅漲綠跌</div>
+      <div class="brand-sub">Taiwan Semiconductor &amp; AI Supply Chain · 智慧族群輪動儀表板</div>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="label">收錄檔數</div><div class="value">{len(rows)}</div></div>
@@ -1002,10 +1121,25 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     </div>
   </header>
 
+  <!-- Warning box (shown by JS when exit signal detected) -->
+  <div id="warningBox">
+    <div class="warn-title">🚨 警訊：核心資金退潮，低基期落後補漲發動，請防範大盤拉回風險！</div>
+    <div class="warn-body" id="warningDetail"></div>
+  </div>
+
+  <!-- Rotation panel -->
+  <div class="rotation-panel">
+    <div class="rotation-panel-title">⚡ 產業鏈大戶資金輪動即時訊號</div>
+    <div id="rotationBadges"><span class="r-empty">計算中，請稍候…</span></div>
+  </div>
+
+  <!-- Filter pills -->
   <div class="pills">{pills}</div>
 
+  <!-- Stage heatmap -->
   <div class="stage-map">{"".join(stage_parts)}</div>
 
+  <!-- Toolbar -->
   <div class="toolbar">
     <div class="search-box">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1019,9 +1153,10 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     </div>
   </div>
 
+  <!-- Group sections -->
   <main id="groupList">{"".join(sections)}</main>
 
-</div>
+</div><!-- /wrap -->
 
 <script>
 (function () {{
@@ -1060,6 +1195,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     }});
   }}
 
+  /* Sortable columns */
   document.querySelectorAll('.stock-table').forEach(function (tbl) {{
     tbl.querySelectorAll('th.sortable').forEach(function (th) {{
       th.addEventListener('click', function () {{
