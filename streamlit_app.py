@@ -4,7 +4,7 @@ import html
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +56,8 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     two_tickers = [f"{c}.TWO" for c in all_codes]
 
     quotes: dict[str, dict[str, Any]] = {}
-    now = datetime.now()
+    TW = timezone(timedelta(hours=8))
+    now = datetime.now(TW)
     latest_time = now.strftime("%H:%M:%S")
     latest_date = now.strftime("%Y-%m-%d")
 
