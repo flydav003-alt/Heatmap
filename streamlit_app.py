@@ -322,6 +322,76 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     }});
   }});
 
+  /* ── 台灣時間（JS 瀏覽器直取，不依賴 Python cache 的 latest_time）──────── */
+  const _nowTW  = new Date(new Date().toLocaleString("en-US", {{timeZone:"Asia/Taipei"}}));
+  const _twHour = _nowTW.getHours();
+  const _twMin  = _nowTW.getMinutes();
+  const _twDay  = _nowTW.getDay(); // 0=日,6=六
+  const _twTimeStr = `${{String(_twHour).padStart(2,"0")}}:${{String(_twMin).padStart(2,"0")}}`;
+  const _isTradingDay  = _twDay >= 1 && _twDay <= 5;
+  const _minsSinceOpen = (_twHour - 9) * 60 + _twMin;
+  const _isIntraday    = _isTradingDay && _minsSinceOpen >= 0 && _minsSinceOpen < 270;
+  const _isAfterClose  = _isTradingDay && _minsSinceOpen >= 270;
+
+  /* ── 盤中量能修正係數（優先用板塊實際進度，fallback 時間推估）────────── */
+  //
+  // 【方法 A】板塊實際進度法（主要方法）
+  //   原理：今日全板塊已成交量 ÷ 全板塊20日均量 = 板塊完成進度
+  //   例：10:30 板塊已跑到昨日全日的 35% → 係數 = 1/0.35 = 2.86x
+  //   優點：天然反映 U 型量能分佈，開盤大量→高係數低，午盤縮量→係數適度放大
+  //         所有族群用同一基準，族群間相對強弱才有意義
+  //
+  // 【方法 B】時間線性推估法（fallback）
+  //   當板塊均量資料不足時（avgVol20 覆蓋率 < 30%）才啟用
+  //   公式：270 / (已過分鐘 × 0.9)，上限 4x
+  //   缺點：假設量能平均分佈，早盤會高估
+  //
+  let _intradayFactor = 1.0;
+  let _factorMethod   = "盤後/非交易日（係數=1）";
+
+  if (_isIntraday) {{
+    // 計算全板塊今日已成交量（張）vs 20日均量加總
+    let _totalVolToday = 0;   // 今日已成交（來自 quotes，盤中即時）
+    let _totalAvgVol20 = 0;   // 20日均量加總（來自 build 預埋 data-avg-vol20）
+    let _avgVol20Count = 0;   // 有 avgVol20 資料的個股數
+    let _totalStockCount = 0; // 所有個股數
+
+    document.querySelectorAll("tr[data-code]").forEach(row => {{
+      _totalStockCount++;
+      const q = quotes[row.dataset.code];
+      if (q && q.volume_lots != null && isFinite(+q.volume_lots)) {{
+        _totalVolToday += +q.volume_lots;
+      }}
+      const av = parseFloat(row.dataset.avgVol20);
+      if (isFinite(av) && av > 0) {{
+        _totalAvgVol20 += av;
+        _avgVol20Count++;
+      }}
+    }});
+
+    // avgVol20 覆蓋率：有資料的股數 / 總股數
+    const _avgVol20Coverage = _totalStockCount > 0 ? _avgVol20Count / _totalStockCount : 0;
+    // 板塊今日進度：今日量 / 20日均量（代表今天跑到幾成）
+    const _boardProgress = (_totalAvgVol20 > 0 && _totalVolToday > 0)
+      ? _totalVolToday / _totalAvgVol20
+      : null;
+
+    if (_boardProgress != null && _avgVol20Coverage >= 0.3) {{
+      // 【方法 A】板塊實際進度：係數 = 1 / 進度，上限 5x（防開盤前幾分鐘爆炸）
+      _intradayFactor = Math.min(1 / _boardProgress, 5.0);
+      _factorMethod   = `板塊進度法（今日/均量=${{(_boardProgress*100).toFixed(1)}}% avgVol覆蓋${{(_avgVol20Coverage*100).toFixed(0)}}%）`;
+    }} else {{
+      // 【方法 B】時間線性推估 fallback
+      _intradayFactor = Math.min(270 / (_minsSinceOpen * 0.9 + 1), 4.0);
+      _factorMethod   = `時間推估法fallback（avgVol覆蓋率${{(_avgVol20Coverage*100).toFixed(0)}}%不足）`;
+    }}
+  }}
+
+  const _sessionLabel = !_isTradingDay ? "非交易日"
+    : _minsSinceOpen < 0 ? "盤前"
+    : _isIntraday        ? `盤中 ${{_twTimeStr}}`
+    : "盤後收盤";
+
   /* ── 族群指標 + 輪動等級 ─────────────────────────────────────────────────── */
   const groupGrades = new Map();
 
@@ -330,44 +400,103 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     const avgChange=stat.sum/stat.count;
     const breadth  =stat.totalCount>0?(stat.upCount/stat.totalCount)*100:null;
     const avgVol20PerStock=stat.cntVol20>0?stat.sumAvgVol20/stat.cntVol20:null;
-    // 族群預估20日總均量：用「有資料的均量均值」× 「族群總股數（含無資料的）」
-    // 這樣分母不會因為部分個股無歷史資料而被低估
     const totalStocks=stat.totalCount||stat.count||1;
     const estVol20=avgVol20PerStock!=null?avgVol20PerStock*totalStocks:null;
-    const volRatio=(estVol20!=null&&estVol20>0&&stat.volume>0)?stat.volume/estVol20:null;
+
+    // ── 盤中時間修正量比 ──────────────────────────────────────────────────
+    // 盤中：用推估全日量比（當前量×時間係數 / 20日均量），門檻維持不變
+    // 盤後：直接用實際量比，不調整
+    const adjVol = stat.volume * _intradayFactor;
+    const volRatio    = (estVol20!=null&&estVol20>0&&stat.volume>0) ? stat.volume/estVol20 : null;
+    const volRatioAdj = (estVol20!=null&&estVol20>0&&stat.volume>0) ? adjVol/estVol20      : null;
+    // hasVol：只要 build 有埋 avgVol20 資料就視為有量比
+    const hasVol = volRatio!=null;
+
     const avgPrice  =stat.cntPrice>0?stat.sumPrice/stat.cntPrice:null;
     const avgP5close=stat.cntP5>0?stat.sumP5close/stat.cntP5:null;
     const avgP20high=stat.cntP20>0?stat.sumP20high/stat.cntP20:null;
     const mom5d   =(avgPrice!=null&&avgP5close!=null&&avgP5close>0)?(avgPrice/avgP5close-1)*100:null;
     const drawdown=(avgPrice!=null&&avgP20high!=null&&avgP20high>0)?(avgPrice/avgP20high-1)*100:null;
-    const hasVol=volRatio!=null;
+
+    // ── 等級判斷：採「積分制」，各指標各自得分後加總 ──────────────────────
+    // 設計原則：
+    //   • 漲幅 + 廣度 是核心指標（盤中就能可靠反映）
+    //   • 量比 是輔助加分（盤中用時間修正後的量比，不作為硬門檻）
+    //   • 積分 ≥ 70 → A；≥ 45 → B；量能異動特殊型 → C；其餘 → D；退潮 → E
+    //
+    // 漲幅分（0–40分）
+    let sChange=0;
+    if     (avgChange>=3.0) sChange=40;
+    else if(avgChange>=2.0) sChange=32;
+    else if(avgChange>=1.2) sChange=24;
+    else if(avgChange>=0.6) sChange=14;
+    else if(avgChange>=0.0) sChange=4;
+    // 廣度分（0–40分）
+    let sBreadth=0;
+    if(breadth!=null){{
+      if     (breadth>=80) sBreadth=40;
+      else if(breadth>=65) sBreadth=32;
+      else if(breadth>=50) sBreadth=20;
+      else if(breadth>=35) sBreadth=8;
+    }}
+    // 量比分（0–20分）：盤中用推估值，盤後用實際值
+    let sVol=0;
+    const vr4grade = _isIntraday ? volRatioAdj : volRatio;
+    if(vr4grade!=null){{
+      if     (vr4grade>=2.0) sVol=20;
+      else if(vr4grade>=1.5) sVol=15;
+      else if(vr4grade>=1.2) sVol=10;
+      else if(vr4grade>=1.0) sVol=5;
+    }} else {{
+      // 無量比資料時：給中性分避免永遠差一口氣（不獎勵也不懲罰）
+      sVol=8;
+    }}
+
+    const score = sChange + sBreadth + sVol;
 
     let grade="D";
-    // E 級：退潮
-    if(avgChange<-1.0||(breadth!=null&&breadth<25))grade="E";
-    // A 級：領漲爆發
-    // 有量比：需漲幅>1.2% + 廣度≥65% + 量比≥1.35
-    // 無量比（build未跑yfinance）：降低門檻，漲幅>1.2% + 廣度≥65% 即可
-    else if(avgChange>1.2&&breadth!=null&&breadth>=65&&(!hasVol||volRatio>=1.35))grade="A";
-    // B 級：擴散接棒
-    // 有量比：需漲幅>0.6% + 廣度≥50% + 量比≥1.15
-    // 無量比：漲幅>0.6% + 廣度≥50% 即可
-    else if(avgChange>0.6&&breadth!=null&&breadth>=50&&(!hasVol||volRatio>=1.15))grade="B";
-    // C 級：低基期補漲（嚴格要求量比有值才判定）
-    else if(hasVol&&volRatio>=1.35&&drawdown!=null&&drawdown<-10&&mom5d!=null&&mom5d<3)grade="C";
+    // E 級：退潮（強制覆蓋，不進積分流程）
+    if(avgChange<-1.0||(breadth!=null&&breadth<25)){{
+      grade="E";
+    }}
+    // A 級：領漲爆發（積分 ≥ 70，且漲幅與廣度都達到一定水準）
+    else if(score>=70 && avgChange>=1.2 && (breadth==null||breadth>=60)){{
+      grade="A";
+    }}
+    // B 級：擴散接棒（積分 ≥ 45，且漲幅正向）
+    else if(score>=45 && avgChange>=0.5){{
+      grade="B";
+    }}
+    // C 級：低基期量能異動（量能明顯放大、距高點回檔深、但近期未爆發）
+    // 盤中用推估量比，讓早盤也能偵測到
+    else if((vr4grade!=null&&vr4grade>=1.3) && drawdown!=null&&drawdown<-10 && mom5d!=null&&mom5d<3){{
+      grade="C";
+    }}
     // D 級：橫盤整理（預設）
 
-    groupGrades.set(group,{{grade,stage:GROUP_STAGE[group]||"",avgChange,breadth,volRatio,mom5d,drawdown,hasVol,stat}});
+    groupGrades.set(group,{{
+      grade, score,
+      stage:GROUP_STAGE[group]||"",
+      avgChange, breadth,
+      volRatio, volRatioAdj, vr4grade,
+      mom5d, drawdown, hasVol,
+      sChange, sBreadth, sVol,
+      stat
+    }});
   }});
 
   // 診斷輸出（按 F12 → Console 查看）
+  console.log(`%c[輪動等級] ${{_sessionLabel}} | 係數x${{_intradayFactor.toFixed(2)}} | ${{_factorMethod}} | JS台灣時間 ${{_twTimeStr}} 週${{["日","一","二","三","四","五","六"][_twDay]}}`, "color:#22d3ee;font-weight:bold");
   const debugRows=[];
   groupGrades.forEach((gi,g)=>{{
     debugRows.push({{
-      族群:g.split(" / ")[0], 等級:gi.grade,
+      族群:g.split(" / ")[0],
+      等級:gi.grade,
+      積分:`${{gi.score}}（漲${{gi.sChange}}+廣${{gi.sBreadth}}+量${{gi.sVol}}）`,
       均漲幅:gi.avgChange!=null?gi.avgChange.toFixed(2)+"%":"--",
-      廣度:gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--（無報價）",
-      量比:gi.volRatio!=null?gi.volRatio.toFixed(2)+"x":"--（build未含yfinance）",
+      廣度:gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--",
+      原始量比:gi.volRatio!=null?gi.volRatio.toFixed(2)+"x":"--",
+      推估量比:gi.volRatioAdj!=null?gi.volRatioAdj.toFixed(2)+"x":"--",
       有歷史量:gi.hasVol?"✅":"❌",
     }});
   }});
@@ -402,9 +531,13 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const stage=STAGE_LABEL[ginfo.stage]||ginfo.stage;
       const sfx=GRADE_SUFFIX[ginfo.grade]||"";
       const lbl=sfx?`【${{ginfo.grade}}級 · ${{stage}}${{sfx}}】`:`【${{ginfo.grade}}級】`;
-      const vr=ginfo.volRatio!=null?`量比${{ginfo.volRatio.toFixed(2)}}x`:"量比--";
+      // 盤中顯示推估量比+標記 *，盤後顯示實際量比
+      const vrVal = _isIntraday ? ginfo.volRatioAdj : ginfo.volRatio;
+      const vrTag = _isIntraday ? "*" : "";
+      const vr=vrVal!=null?`量比${{vrVal.toFixed(2)}}x${{vrTag}}`:"量比--";
       const bd=ginfo.breadth!=null?`廣度${{ginfo.breadth.toFixed(0)}}%`:"";
-      infoEl.textContent=[lbl,vr,bd].filter(Boolean).join(" ");
+      const sc=`積${{ginfo.score}}`;
+      infoEl.textContent=[lbl,vr,bd,sc].filter(Boolean).join(" ");
       infoEl.style.color=GRADE_COLOR[ginfo.grade]||"#7a9bbb";
       infoEl.style.borderColor=(GRADE_COLOR[ginfo.grade]||"#7a9bbb")+"44";
     }}
@@ -450,7 +583,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const sfx=GRADE_SUFFIX[gi.grade]||"";
       const stage=STAGE_LABEL[gi.stage]||gi.stage;
       const lbl=sfx?`${{gi.grade}}級·${{stage}}${{sfx}}`:`${{gi.grade}}級`;
-      const vr=gi.volRatio!=null?` 量比${{gi.volRatio.toFixed(2)}}x`:"";
+      const vrVal2 = _isIntraday ? gi.volRatioAdj : gi.volRatio;
+      const vrTag2 = _isIntraday ? "*" : "";
+      const vr=vrVal2!=null?` 量比${{vrVal2.toFixed(2)}}x${{vrTag2}}`:"";
       const bd=gi.breadth!=null?` 廣${{gi.breadth.toFixed(0)}}%`:"";
       signals.push({{grade:gi.grade,html:
         `<span class="r-badge grade-${{gi.grade.toLowerCase()}}">
