@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-05-22 20:25:37",
+  "updated_at": "2026-05-22 20:41:40",
   "latest_price_date": "2026-05-22",
   "themes": {
     "ASIC": {
@@ -940,7 +940,7 @@
         },
         {
           "code": "2356",
-          "name": "2356",
+          "name": "英業達",
           "price": 54.1,
           "change_pct": 5.252918287937744,
           "volume_lots": 52796.8,
