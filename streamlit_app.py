@@ -141,8 +141,8 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
 def estimate_page_height(base_html: str) -> int:
     num_rows   = base_html.count('data-code="')
     num_groups = base_html.count('class="group-card"')
-    # 精確估算：固定頁首約 520px + 每族群標題 90px + 每列 52px + 底部安全邊距 80px
-    return 520 + num_groups * 90 + num_rows * 52 + 80
+    # 精確估算：固定頁首約 520px + 每族群標題 90px + 每列 52px + 底部安全邊距 20px
+    return 520 + num_groups * 90 + num_rows * 52 + 20
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
@@ -1104,7 +1104,7 @@ def main() -> None:
 
     html_content = inject_live_script(html_content, payload, stock_groups)
     page_height  = estimate_page_height(html_content)
-    components.html(html_content, height=page_height, scrolling=False)
+    components.html(html_content, height=page_height, scrolling=True)
 
 
 if __name__ == "__main__":
