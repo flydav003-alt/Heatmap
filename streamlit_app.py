@@ -1104,7 +1104,7 @@ def main() -> None:
 
     html_content = inject_live_script(html_content, payload, stock_groups)
     page_height  = estimate_page_height(html_content)
-    components.html(html_content, height=800, scrolling=True)
+    components.html(html_content, scrolling=True)
 
 
 if __name__ == "__main__":
