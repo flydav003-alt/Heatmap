@@ -141,7 +141,8 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
 def estimate_page_height(base_html: str) -> int:
     num_rows   = base_html.count('data-code="')
     num_groups = base_html.count('class="group-card"')
-    return max(5200, 1400 + num_groups * 68 + num_rows * 38)
+    # 補充區（半導體其他）個股多、資本額小，高度容易被截；多給 800px buffer
+    return max(6500, 1800 + num_groups * 90 + num_rows * 52)
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
@@ -469,11 +470,13 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
 
     let grade="D";
 
-    // E 級：退潮（強制）
+    // E 級：退潮（強制，最優先）
+    // 條件：均跌 > 1% 或廣度 < 25%（超過四分之三的股在跌）
     if(avgChange<-1.0||(breadth!=null&&breadth<25)){{
       grade="E";
     }}
-    // A 級：「絕對強」＋「相對領先板塊」
+    // A 級：「絕對強」＋「相對明顯領先板塊」
+    // 條件：漲幅≥1.5% + 廣度≥60% + 超板塊均值0.8%以上
     else if(
       avgChange>=1.5 &&
       (breadth==null||breadth>=60) &&
@@ -483,6 +486,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       grade="A";
     }}
     // B 級：「絕對不弱」＋「不落後板塊太多」
+    // 條件：漲幅≥0.5% + 廣度≥45% + 不落後板塊均值0.3%以上
     else if(
       avgChange>=0.5 &&
       (breadth==null||breadth>=45) &&
@@ -490,15 +494,20 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     ){{
       grade="B";
     }}
-    // C 級：量能異動低基期（推估量比明顯 + 距高點回檔深 + 近期未爆發）
+    // C 級：低基期量能蓄力型
+    // 定義：漲幅偏弱（未達B級），但量能相對放大 + 距20日高點回檔深 + 近5日未爆發
+    // 代表意義：資金悄悄進場，可能是下一棒輪動目標
+    // 注意：drawdown/mom5d 來自 build 預埋的歷史資料，yfinance沒跑到就是null→條件失敗→維持D
+    //       vr4grade 是推估量比，盤中用時間修正後的值
     else if(
-      (vr4grade!=null&&vr4grade>=1.3) &&
-      drawdown!=null&&drawdown<-10 &&
-      mom5d!=null&&mom5d<3
+      vr4grade!=null && vr4grade>=1.2 &&
+      drawdown!=null && drawdown<-8 &&
+      (mom5d==null || mom5d<5)
     ){{
       grade="C";
     }}
     // D 級：橫盤整理（預設）
+    // 代表意義：量縮、廣度低、沒有明顯方向，靜待觀察
 
     groupGrades.set(group,{{
       grade, sVol,
