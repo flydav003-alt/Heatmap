@@ -141,8 +141,8 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
 def estimate_page_height(base_html: str) -> int:
     num_rows   = base_html.count('data-code="')
     num_groups = base_html.count('class="group-card"')
-    # 補充區（半導體其他）個股多、資本額小，高度容易被截；多給 800px buffer
-    return max(6500, 1800 + num_groups * 90 + num_rows * 52)
+    # 精確估算：固定頁首約 520px + 每族群標題 90px + 每列 52px + 底部安全邊距 80px
+    return 520 + num_groups * 90 + num_rows * 52 + 80
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
@@ -1032,10 +1032,29 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         "</div>"
     )
 
+    # ── 自動回報實際內容高度，讓 Streamlit 動態調整 iframe 高度 ──
+    auto_resize_script = (
+        "<script>"
+        "(function(){"
+        "function reportHeight(){"
+        "var h=document.documentElement.scrollHeight||document.body.scrollHeight;"
+        "window.parent.postMessage({type:'streamlit:setFrameHeight',height:h},'*');"
+        "}"
+        "if(document.readyState==='complete'){reportHeight();}"
+        "else{window.addEventListener('load',reportHeight);}"
+        "document.addEventListener('quotesReady',function(){setTimeout(reportHeight,300);});"
+        "if(window.ResizeObserver){"
+        "var ro=new ResizeObserver(function(){reportHeight();});"
+        "ro.observe(document.body);"
+        "}"
+        "})();"
+        "</script>"
+    )
+
     out = base_html.replace("</head>", extra_css + "</head>", 1)
     out = out.replace('<main id="groupList">',
                       chart_html + radar_html + vol_html + '<main id="groupList">', 1)
-    out = out.replace("</body>", script + "</body>", 1)
+    out = out.replace("</body>", script + auto_resize_script + "</body>", 1)
     return out
 
 
