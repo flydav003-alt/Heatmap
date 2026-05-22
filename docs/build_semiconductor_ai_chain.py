@@ -345,63 +345,66 @@ def roc_date_to_ad(roc_date: str) -> str:
 
 
 # ── Historical data via yfinance batch download ────────────────────────────────
-def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict[str, float | None]]:
+def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict]:
     """
-    批次下載所有個股近1個月日K，計算三個歷史指標。
-    使用 yf.download(group_by='ticker') 一次性下載，避免逐一 rate-limit。
-    回傳 {code: {avg_vol20, p5_close, p20_high}}
+    批次下載所有個股近 45 日日K，計算歷史指標。
+    period="45d" 確保跨假日連假仍有足夠交易日。
+    回傳 {code: {avg_vol20, p5_close, p20_high, history_5d}}
     """
     if not HAS_YF:
+        print("ERROR: yfinance 未安裝！請在 workflow 中加入 pip install yfinance pandas")
         return {}
 
-    # 先嘗試 .TW 後綴，再嘗試 .TWO
-    # 組合 ticker 清單：每個 code 都嘗試兩個後綴
     tw_tickers  = [f"{c}.TW"  for c in all_codes]
     two_tickers = [f"{c}.TWO" for c in all_codes]
     all_tickers = tw_tickers + two_tickers
 
-    print(f"[yf] 批次下載 {len(all_tickers)} 個 ticker 近1個月日K…")
-    result: dict[str, dict[str, float | None]] = {}
+    print(f"[yf] 批次下載 {len(all_tickers)} 個 ticker，period=45d …")
+    result: dict[str, dict] = {}
+
+    import pandas as pd  # type: ignore
 
     try:
-        # 一次性批次下載，避免 rate limit
         raw = yf.download(
             tickers=all_tickers,
-            period="1mo",
+            period="45d",
             group_by="ticker",
             auto_adjust=True,
             progress=False,
             threads=True,
         )
+        if raw is None or raw.empty:
+            print("[yf] 下載結果為空！可能是網路問題或 Yahoo API 限制")
+            return {}
+        print(f"[yf] 下載完成，raw shape={raw.shape}")
     except Exception as exc:
         print(f"[yf] 批次下載失敗: {exc}")
         return {}
 
-    import pandas as pd  # type: ignore
-
-    def _extract(ticker: str) -> dict[str, float | None] | None:
+    def _extract(ticker: str) -> dict | None:
         try:
-            if len(all_tickers) == 1:
-                df = raw
-            elif ticker in raw.columns.get_level_values(0):
-                df = raw[ticker]
+            if isinstance(raw.columns, pd.MultiIndex):
+                lvl0 = raw.columns.get_level_values(0).unique().tolist()
+                if ticker not in lvl0:
+                    return None
+                df = raw[ticker].copy()
             else:
-                return None
+                df = raw.copy()
 
             if df is None or df.empty:
                 return None
 
-            close = df["Close"].dropna()
+            close  = df["Close"].dropna()
             volume = df["Volume"].dropna()
 
-            if len(close) < 2:
+            if len(close) < 3:
                 return None
 
-            # avg_vol20: 過去20日平均成交張數（Yahoo volume 是股，除以1000換算張）
-            vol_series = volume.tail(20)
-            avg_vol20 = float(vol_series.mean() / 1000) if len(vol_series) >= 1 else None
+            # avg_vol20: 過去 20 交易日平均成交張數（Yahoo volume 是股，/1000 = 張）
+            vol_tail  = volume.tail(20)
+            avg_vol20 = float(vol_tail.mean() / 1000) if len(vol_tail) >= 5 else None
 
-            # p5_close: 5個交易日前的收盤價（倒數第6根，index -6）
+            # p5_close: 5 個交易日前的收盤價（iloc[-6] = 跳過今日後第5根）
             if len(close) >= 6:
                 p5_close = float(close.iloc[-6])
             elif len(close) >= 2:
@@ -409,18 +412,23 @@ def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict[str, float | 
             else:
                 p5_close = None
 
-            # p20_high: 過去20日最高收盤價
-            high_series = close.tail(20)
-            p20_high = float(high_series.max()) if len(high_series) >= 1 else None
+            # p20_high: 過去 20 交易日最高收盤價
+            close_tail = close.tail(20)
+            p20_high   = float(close_tail.max()) if len(close_tail) >= 1 else None
 
-            # history_5d: 過去5個交易日收盤序列（供 JS 折線圖用）
+            # history_5d: 最近 5 個交易日收盤序列（供 JS 折線圖）
             history_5d: list[dict] = []
             for ts, v in close.tail(5).items():
                 try:
-                    d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                    d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[5:10]
                     history_5d.append({"d": d, "c": round(float(v), 2)})
                 except Exception:
                     pass
+
+            # 資料合理性驗證
+            if avg_vol20 is not None and avg_vol20 <= 0: avg_vol20 = None
+            if p5_close  is not None and p5_close  <= 0: p5_close  = None
+            if p20_high  is not None and p20_high  <= 0: p20_high  = None
 
             return {
                 "avg_vol20":  avg_vol20,
@@ -428,22 +436,26 @@ def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict[str, float | 
                 "p20_high":   p20_high,
                 "history_5d": history_5d if len(history_5d) >= 2 else None,
             }
-        except Exception:
+        except Exception as e:
+            print(f"[yf] _extract({ticker}) 失敗: {e}")
             return None
 
     # 優先取 .TW，fallback 到 .TWO
+    success = 0
     for code in all_codes:
         attrs = _extract(f"{code}.TW")
         if attrs is None:
             attrs = _extract(f"{code}.TWO")
         if attrs is not None:
             result[code] = attrs
+            success += 1
 
-    print(f"[yf] 成功取得 {len(result)}/{len(all_codes)} 檔歷史指標")
+    pct = success / len(all_codes) * 100 if all_codes else 0
+    print(f"[yf] 成功取得 {success}/{len(all_codes)} 檔 ({pct:.0f}%) 歷史指標")
+    if pct < 50:
+        print("[yf] WARNING: 成功率低於 50%，請檢查網路或 Yahoo API 狀態")
     return result
 
-
-# ── Data fetching ──────────────────────────────────────────────────────────────
 def load_listed_prices() -> tuple[dict[str, dict[str, Any]], str]:
     rows = fetch_json(LISTED_PRICE_URL)
     out: dict[str, dict[str, Any]] = {}
