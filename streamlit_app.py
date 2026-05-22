@@ -330,7 +330,10 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     const avgChange=stat.sum/stat.count;
     const breadth  =stat.totalCount>0?(stat.upCount/stat.totalCount)*100:null;
     const avgVol20PerStock=stat.cntVol20>0?stat.sumAvgVol20/stat.cntVol20:null;
-    const estVol20=avgVol20PerStock!=null?avgVol20PerStock*stat.cntVol20:null;
+    // 族群預估20日總均量：用「有資料的均量均值」× 「族群總股數（含無資料的）」
+    // 這樣分母不會因為部分個股無歷史資料而被低估
+    const totalStocks=stat.totalCount||stat.count||1;
+    const estVol20=avgVol20PerStock!=null?avgVol20PerStock*totalStocks:null;
     const volRatio=(estVol20!=null&&estVol20>0&&stat.volume>0)?stat.volume/estVol20:null;
     const avgPrice  =stat.cntPrice>0?stat.sumPrice/stat.cntPrice:null;
     const avgP5close=stat.cntP5>0?stat.sumP5close/stat.cntP5:null;
