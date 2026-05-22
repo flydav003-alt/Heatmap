@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 
 
@@ -1031,10 +1032,33 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         "</div>"
     )
 
+    # ── 精準回報內容高度，讓 Streamlit iframe 剛好等於內容（無多餘空白）──
+    auto_resize_script = (
+        "<script>"
+        "(function(){"
+        "function reportHeight(){"
+        # 用 body 的 scrollHeight，不用 documentElement（避免 iframe 撐高後回報錯誤）
+        "var h=document.body.scrollHeight;"
+        "window.parent.postMessage({type:'streamlit:setFrameHeight',height:h},'*');"
+        "}"
+        # 頁面載入完畢立即回報
+        "if(document.readyState==='complete'){reportHeight();}"
+        "else{window.addEventListener('load',reportHeight);}"
+        # quotesReady 後再回報一次（JS 動態塞完內容後）
+        "document.addEventListener('quotesReady',function(){setTimeout(reportHeight,400);});"
+        # ResizeObserver 監聽 body 尺寸變化（動態內容展開/收合）
+        "if(window.ResizeObserver){"
+        "var _ro=new ResizeObserver(function(){reportHeight();});"
+        "_ro.observe(document.body);"
+        "}"
+        "})();"
+        "</script>"
+    )
+
     out = base_html.replace("</head>", extra_css + "</head>", 1)
     out = out.replace('<main id="groupList">',
                       chart_html + radar_html + vol_html + '<main id="groupList">', 1)
-    out = out.replace("</body>", script + "</body>", 1)
+    out = out.replace("</body>", script + auto_resize_script + "</body>", 1)
     return out
 
 
@@ -1054,8 +1078,12 @@ def main() -> None:
           [data-testid="stVerticalBlock"]{gap:0!important;padding:0!important;}
           [data-testid="element-container"]{padding:0!important;margin:0!important;}
           .block-container{padding:0!important;max-width:100%!important;}
-          .stApp{overflow:visible!important;}
-          html,body{overflow:auto!important;margin:0;padding:0;}
+          /* 讓整個 Streamlit 頁面可以跟著 iframe 高度自然撐開並捲動 */
+          html,body{overflow:auto!important;height:auto!important;}
+          .stApp{overflow:visible!important;height:auto!important;}
+          [data-testid="stAppViewContainer"]{overflow:visible!important;height:auto!important;}
+          /* iframe 本身不要有邊框或多餘空間 */
+          iframe{display:block!important;border:none!important;margin:0!important;padding:0!important;}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -1083,16 +1111,9 @@ def main() -> None:
                 st.caption(e)
 
     html_content = inject_live_script(html_content, payload, stock_groups)
-    # 直接注入完整 HTML，讓瀏覽器原生上下捲動（不用 iframe）
-    # 萃取 <head> 內容（styles/links）和 <body> 內容分別注入
-    import re as _re
-    head_match = _re.search(r"<head[^>]*>([\s\S]*?)</head>", html_content, _re.IGNORECASE)
-    body_match = _re.search(r"<body[^>]*>([\s\S]*)</body>", html_content, _re.IGNORECASE)
-    head_inner = head_match.group(1) if head_match else ""
-    body_inner = body_match.group(1) if body_match else html_content
-    # 把 head 裡的 style/link/script 都保留，body 內容直接渲染
-    full_inject = head_inner + body_inner
-    st.markdown(full_inject, unsafe_allow_html=True)
+    page_height  = estimate_page_height(html_content)
+    # scrolling=False：iframe 本身不捲，高度由 postMessage 動態撐開，捲動交給瀏覽器整頁
+    components.html(html_content, height=page_height, scrolling=False)
 
 
 if __name__ == "__main__":
