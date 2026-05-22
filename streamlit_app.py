@@ -931,6 +931,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       }}).join("");
     }}
   }}
+
+  // 通知靜態 JS 重整篩選顯示（補充區需重算 visible）
+  document.dispatchEvent(new CustomEvent("quotesReady"));
 }})();
 </script>
 """
