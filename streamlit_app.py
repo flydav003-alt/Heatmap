@@ -392,95 +392,121 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     : _isIntraday        ? `盤中 ${{_twTimeStr}}`
     : "盤後收盤";
 
-  /* ── 族群指標 + 輪動等級 ─────────────────────────────────────────────────── */
-  const groupGrades = new Map();
+  /* ── 第一輪：收集各族群原始指標 ────────────────────────────────────────── */
+  // 先把所有族群的指標算完，才能算「相對板塊」的強弱
+  const groupRaw = new Map();
+  let _boardAvgChange = 0, _boardChangeCount = 0;
+  let _boardAvgBreadth = 0, _boardBreadthCount = 0;
+  let _boardAvgVolRatio = 0, _boardVolRatioCount = 0;
 
   groupStats.forEach((stat,group)=>{{
     if(!stat.count) return;
-    const avgChange=stat.sum/stat.count;
-    const breadth  =stat.totalCount>0?(stat.upCount/stat.totalCount)*100:null;
-    const avgVol20PerStock=stat.cntVol20>0?stat.sumAvgVol20/stat.cntVol20:null;
-    const totalStocks=stat.totalCount||stat.count||1;
-    const estVol20=avgVol20PerStock!=null?avgVol20PerStock*totalStocks:null;
+    const avgChange = stat.sum / stat.count;
+    const breadth   = stat.totalCount>0 ? (stat.upCount/stat.totalCount)*100 : null;
+    const avgVol20PerStock = stat.cntVol20>0 ? stat.sumAvgVol20/stat.cntVol20 : null;
+    const totalStocks = stat.totalCount||stat.count||1;
+    const estVol20 = avgVol20PerStock!=null ? avgVol20PerStock*totalStocks : null;
+    const adjVol   = stat.volume * _intradayFactor;
+    const volRatio    = (estVol20!=null&&estVol20>0&&stat.volume>0) ? stat.volume/estVol20    : null;
+    const volRatioAdj = (estVol20!=null&&estVol20>0&&stat.volume>0) ? adjVol/estVol20         : null;
+    const vr4grade    = _isIntraday ? volRatioAdj : volRatio;
+    const hasVol      = volRatio!=null;
+    const avgPrice   = stat.cntPrice>0 ? stat.sumPrice/stat.cntPrice   : null;
+    const avgP5close = stat.cntP5>0   ? stat.sumP5close/stat.cntP5    : null;
+    const avgP20high = stat.cntP20>0  ? stat.sumP20high/stat.cntP20   : null;
+    const mom5d      = (avgPrice!=null&&avgP5close!=null&&avgP5close>0) ? (avgPrice/avgP5close-1)*100 : null;
+    const drawdown   = (avgPrice!=null&&avgP20high!=null&&avgP20high>0) ? (avgPrice/avgP20high-1)*100 : null;
 
-    // ── 盤中時間修正量比 ──────────────────────────────────────────────────
-    // 盤中：用推估全日量比（當前量×時間係數 / 20日均量），門檻維持不變
-    // 盤後：直接用實際量比，不調整
-    const adjVol = stat.volume * _intradayFactor;
-    const volRatio    = (estVol20!=null&&estVol20>0&&stat.volume>0) ? stat.volume/estVol20 : null;
-    const volRatioAdj = (estVol20!=null&&estVol20>0&&stat.volume>0) ? adjVol/estVol20      : null;
-    // hasVol：只要 build 有埋 avgVol20 資料就視為有量比
-    const hasVol = volRatio!=null;
+    groupRaw.set(group, {{avgChange,breadth,volRatio,volRatioAdj,vr4grade,hasVol,mom5d,drawdown,stat}});
 
-    const avgPrice  =stat.cntPrice>0?stat.sumPrice/stat.cntPrice:null;
-    const avgP5close=stat.cntP5>0?stat.sumP5close/stat.cntP5:null;
-    const avgP20high=stat.cntP20>0?stat.sumP20high/stat.cntP20:null;
-    const mom5d   =(avgPrice!=null&&avgP5close!=null&&avgP5close>0)?(avgPrice/avgP5close-1)*100:null;
-    const drawdown=(avgPrice!=null&&avgP20high!=null&&avgP20high>0)?(avgPrice/avgP20high-1)*100:null;
-
-    // ── 等級判斷：採「積分制」，各指標各自得分後加總 ──────────────────────
-    // 設計原則：
-    //   • 漲幅 + 廣度 是核心指標（盤中就能可靠反映）
-    //   • 量比 是輔助加分（盤中用時間修正後的量比，不作為硬門檻）
-    //   • 積分 ≥ 70 → A；≥ 45 → B；量能異動特殊型 → C；其餘 → D；退潮 → E
-    //
-    // 漲幅分（0–40分）
-    let sChange=0;
-    if     (avgChange>=3.0) sChange=40;
-    else if(avgChange>=2.0) sChange=32;
-    else if(avgChange>=1.2) sChange=24;
-    else if(avgChange>=0.6) sChange=14;
-    else if(avgChange>=0.0) sChange=4;
-    // 廣度分（0–40分）
-    let sBreadth=0;
-    if(breadth!=null){{
-      if     (breadth>=80) sBreadth=40;
-      else if(breadth>=65) sBreadth=32;
-      else if(breadth>=50) sBreadth=20;
-      else if(breadth>=35) sBreadth=8;
+    // 累積板塊均值（排除「補充」分類，避免半導體其他拉歪基準）
+    if(GROUP_STAGE[group] && GROUP_STAGE[group]!=="補充"){{
+      _boardAvgChange += avgChange; _boardChangeCount++;
+      if(breadth!=null){{ _boardAvgBreadth+=breadth; _boardBreadthCount++; }}
+      if(vr4grade!=null){{ _boardAvgVolRatio+=vr4grade; _boardVolRatioCount++; }}
     }}
-    // 量比分（0–20分）：盤中用推估值，盤後用實際值
-    let sVol=0;
-    const vr4grade = _isIntraday ? volRatioAdj : volRatio;
+  }});
+
+  // 板塊基準值
+  const _bChange  = _boardChangeCount>0  ? _boardAvgChange/_boardChangeCount   : 0;
+  const _bBreadth = _boardBreadthCount>0 ? _boardAvgBreadth/_boardBreadthCount : 50;
+  const _bVolR    = _boardVolRatioCount>0? _boardAvgVolRatio/_boardVolRatioCount: 1.0;
+
+  /* ── 第二輪：計算相對強度 → 等級 ──────────────────────────────────────── */
+  // 設計原則：
+  //   A = 「絕對強」且「相對板塊明顯領先」→ 真正的領漲主力
+  //   B = 「絕對不弱」且「相對板塊稍強或持平」→ 擴散跟漲
+  //   C = 量能異動但位階低（低基期蓄力）
+  //   D = 橫盤整理（預設）
+  //   E = 退潮（強制）
+  //
+  // 絕對門檻（不受大盤影響的硬底線）：
+  //   A: 漲幅 ≥ 1.5%，廣度 ≥ 60%
+  //   B: 漲幅 ≥ 0.5%，廣度 ≥ 45%
+  //
+  // 相對門檻（相對板塊均值的超越幅度）：
+  //   A: 漲幅超過板塊均值 +0.8%，且廣度超過板塊均值 +5%
+  //   B: 漲幅超過板塊均值 -0.3%（不能比板塊差太多）
+
+  const groupGrades = new Map();
+
+  groupRaw.forEach((raw, group)=>{{
+    const {{avgChange,breadth,volRatio,volRatioAdj,vr4grade,hasVol,mom5d,drawdown,stat}} = raw;
+
+    // 相對板塊的超越幅度
+    const relChange  = avgChange - _bChange;
+    const relBreadth = breadth!=null ? breadth - _bBreadth : null;
+    const relVolR    = vr4grade!=null ? vr4grade - _bVolR : null;
+
+    // 量比輔助分（上限20，只加分不硬卡）
+    let sVol = 0;
     if(vr4grade!=null){{
       if     (vr4grade>=2.0) sVol=20;
-      else if(vr4grade>=1.5) sVol=15;
-      else if(vr4grade>=1.2) sVol=10;
-      else if(vr4grade>=1.0) sVol=5;
-    }} else {{
-      // 無量比資料時：給中性分避免永遠差一口氣（不獎勵也不懲罰）
-      sVol=8;
-    }}
-
-    const score = sChange + sBreadth + sVol;
+      else if(vr4grade>=1.5) sVol=14;
+      else if(vr4grade>=1.2) sVol=8;
+      else if(vr4grade>=1.0) sVol=3;
+    }} else {{ sVol=5; }} // 無資料給小中性分
 
     let grade="D";
-    // E 級：退潮（強制覆蓋，不進積分流程）
+
+    // E 級：退潮（強制）
     if(avgChange<-1.0||(breadth!=null&&breadth<25)){{
       grade="E";
     }}
-    // A 級：領漲爆發（積分 ≥ 70，且漲幅與廣度都達到一定水準）
-    else if(score>=70 && avgChange>=1.2 && (breadth==null||breadth>=60)){{
+    // A 級：「絕對強」＋「相對領先板塊」
+    else if(
+      avgChange>=1.5 &&
+      (breadth==null||breadth>=60) &&
+      relChange>=0.8 &&
+      (relBreadth==null||relBreadth>=-5)
+    ){{
       grade="A";
     }}
-    // B 級：擴散接棒（積分 ≥ 45，且漲幅正向）
-    else if(score>=45 && avgChange>=0.5){{
+    // B 級：「絕對不弱」＋「不落後板塊太多」
+    else if(
+      avgChange>=0.5 &&
+      (breadth==null||breadth>=45) &&
+      relChange>=-0.3
+    ){{
       grade="B";
     }}
-    // C 級：低基期量能異動（量能明顯放大、距高點回檔深、但近期未爆發）
-    // 盤中用推估量比，讓早盤也能偵測到
-    else if((vr4grade!=null&&vr4grade>=1.3) && drawdown!=null&&drawdown<-10 && mom5d!=null&&mom5d<3){{
+    // C 級：量能異動低基期（推估量比明顯 + 距高點回檔深 + 近期未爆發）
+    else if(
+      (vr4grade!=null&&vr4grade>=1.3) &&
+      drawdown!=null&&drawdown<-10 &&
+      mom5d!=null&&mom5d<3
+    ){{
       grade="C";
     }}
     // D 級：橫盤整理（預設）
 
     groupGrades.set(group,{{
-      grade, score,
+      grade, sVol,
       stage:GROUP_STAGE[group]||"",
       avgChange, breadth,
       volRatio, volRatioAdj, vr4grade,
+      relChange, relBreadth, relVolR,
       mom5d, drawdown, hasVol,
-      sChange, sBreadth, sVol,
       stat
     }});
   }});
@@ -492,7 +518,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     debugRows.push({{
       族群:g.split(" / ")[0],
       等級:gi.grade,
-      積分:`${{gi.score}}（漲${{gi.sChange}}+廣${{gi.sBreadth}}+量${{gi.sVol}}）`,
+      量比分:`${{gi.sVol}}` ,相對漲幅:`${{gi.relChange!=null?gi.relChange.toFixed(2)+"%":"--"}}` ,相對廣度:`${{gi.relBreadth!=null?gi.relBreadth.toFixed(0)+"%":"--"}}`,
       均漲幅:gi.avgChange!=null?gi.avgChange.toFixed(2)+"%":"--",
       廣度:gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--",
       原始量比:gi.volRatio!=null?gi.volRatio.toFixed(2)+"x":"--",
@@ -536,7 +562,8 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const vrTag = _isIntraday ? "*" : "";
       const vr=vrVal!=null?`量比${{vrVal.toFixed(2)}}x${{vrTag}}`:"量比--";
       const bd=ginfo.breadth!=null?`廣度${{ginfo.breadth.toFixed(0)}}%`:"";
-      const sc=`積${{ginfo.score}}`;
+      const relC = ginfo.relChange!=null ? (ginfo.relChange>=0?"+":"")+ginfo.relChange.toFixed(1)+"%" : "";
+      const sc = relC ? `超板塊${{relC}}` : "";
       infoEl.textContent=[lbl,vr,bd,sc].filter(Boolean).join(" ");
       infoEl.style.color=GRADE_COLOR[ginfo.grade]||"#7a9bbb";
       infoEl.style.borderColor=(GRADE_COLOR[ginfo.grade]||"#7a9bbb")+"44";
