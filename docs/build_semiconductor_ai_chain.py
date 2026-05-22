@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -58,7 +58,7 @@ LISTED_FIN_URL     = "https://www.twse.com.tw/rwd/zh/IIH/company/financial?code=
 
 def _find_otc_revenue_url() -> str | None:
     XLS_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
-    now = datetime.now()
+    now = datetime.now(timezone(timedelta(hours=8)))
     for months_back in range(4):
         year, month = now.year, now.month - months_back
         while month <= 0:
@@ -744,7 +744,7 @@ def build_representative_payload(rows: list[StockRow], meta: dict[str, Any]) -> 
                         "p20_high":   p.p20_high,
                         "history_5d": p.history_5d} for p in picks],
         }
-    return {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    return {"updated_at": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
             "latest_price_date": meta["latest_price_date"], "themes": themes}
 
 
@@ -835,7 +835,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     changes    = [r.change_pct for r in rows if r.change_pct is not None]
     volumes    = [r.volume_shares for r in rows if r.volume_shares is not None]
     avg_change = sum(changes) / len(changes) if changes else None
-    updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated_at = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
     avg_tc     = trend_class(avg_change)
     # 總成交額（億）= Σ(成交股數 × 收盤價) / 1e8
     total_turnover_yi = sum(
@@ -1173,8 +1173,8 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       <div class="kpi"><div class="label">收錄檔數</div><div class="value">{len(rows)}</div></div>
       <div class="kpi"><div class="label">總資本額</div><div class="value">{fmt_num(total_cap, 0)}億</div></div>
       <div class="kpi"><div class="label">平均漲跌幅</div><div class="value {avg_tc}">{fmt_pct(avg_change)}</div></div>
-      <div class="kpi"><div class="label">總成交額</div><div class="value">{fmt_turnover(sum(volumes) if volumes else None, 1.0) if False else (f"{total_turnover_yi:.0f}億" if total_turnover_yi >= 10 else f"{total_turnover_yi:.1f}億")}</div></div>
-      <div class="kpi"><div class="label">更新時間</div><div class="value" style="font-size:13px">{updated_at[11:]}</div></div>
+      <div class="kpi"><div class="label">總成交額</div><div class="value">{"" if total_turnover_yi<=0 else (f"{total_turnover_yi:.0f}億" if total_turnover_yi>=10 else f"{total_turnover_yi:.1f}億")}</div></div>
+      <div class="kpi"><div class="label">更新時間(台灣)</div><div class="value" style="font-size:13px">{updated_at[11:]}</div></div>
     </div>
   </header>
 
