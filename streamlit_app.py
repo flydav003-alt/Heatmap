@@ -338,13 +338,37 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     const mom5d   =(avgPrice!=null&&avgP5close!=null&&avgP5close>0)?(avgPrice/avgP5close-1)*100:null;
     const drawdown=(avgPrice!=null&&avgP20high!=null&&avgP20high>0)?(avgPrice/avgP20high-1)*100:null;
     const hasVol=volRatio!=null;
+
     let grade="D";
+    // E 級：退潮
     if(avgChange<-1.0||(breadth!=null&&breadth<25))grade="E";
-    else if(avgChange>1.2&&breadth!=null&&breadth>=65&&(hasVol?volRatio>=1.35:avgChange>2.0))grade="A";
-    else if(avgChange>0.6&&breadth!=null&&breadth>=50&&(hasVol?volRatio>=1.15:avgChange>1.2))grade="B";
+    // A 級：領漲爆發
+    // 有量比：需漲幅>1.2% + 廣度≥65% + 量比≥1.35
+    // 無量比（build未跑yfinance）：降低門檻，漲幅>1.2% + 廣度≥65% 即可
+    else if(avgChange>1.2&&breadth!=null&&breadth>=65&&(!hasVol||volRatio>=1.35))grade="A";
+    // B 級：擴散接棒
+    // 有量比：需漲幅>0.6% + 廣度≥50% + 量比≥1.15
+    // 無量比：漲幅>0.6% + 廣度≥50% 即可
+    else if(avgChange>0.6&&breadth!=null&&breadth>=50&&(!hasVol||volRatio>=1.15))grade="B";
+    // C 級：低基期補漲（嚴格要求量比有值才判定）
     else if(hasVol&&volRatio>=1.35&&drawdown!=null&&drawdown<-10&&mom5d!=null&&mom5d<3)grade="C";
-    groupGrades.set(group,{{grade,stage:GROUP_STAGE[group]||"",avgChange,breadth,volRatio,mom5d,drawdown,stat}});
+    // D 級：橫盤整理（預設）
+
+    groupGrades.set(group,{{grade,stage:GROUP_STAGE[group]||"",avgChange,breadth,volRatio,mom5d,drawdown,hasVol,stat}});
   }});
+
+  // 診斷輸出（按 F12 → Console 查看）
+  const debugRows=[];
+  groupGrades.forEach((gi,g)=>{{
+    debugRows.push({{
+      族群:g.split(" / ")[0], 等級:gi.grade,
+      均漲幅:gi.avgChange!=null?gi.avgChange.toFixed(2)+"%":"--",
+      廣度:gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--（無報價）",
+      量比:gi.volRatio!=null?gi.volRatio.toFixed(2)+"x":"--（build未含yfinance）",
+      有歷史量:gi.hasVol?"✅":"❌",
+    }});
+  }});
+  console.table(debugRows);
 
   /* ── KPI ─────────────────────────────────────────────────────────────────── */
   const avg=totalCount?totalChange/totalCount:null;
