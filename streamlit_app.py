@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
 import yfinance as yf
 
 
@@ -1032,29 +1031,10 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         "</div>"
     )
 
-    # ── 自動回報實際內容高度，讓 Streamlit 動態調整 iframe 高度 ──
-    auto_resize_script = (
-        "<script>"
-        "(function(){"
-        "function reportHeight(){"
-        "var h=document.documentElement.scrollHeight||document.body.scrollHeight;"
-        "window.parent.postMessage({type:'streamlit:setFrameHeight',height:h},'*');"
-        "}"
-        "if(document.readyState==='complete'){reportHeight();}"
-        "else{window.addEventListener('load',reportHeight);}"
-        "document.addEventListener('quotesReady',function(){setTimeout(reportHeight,300);});"
-        "if(window.ResizeObserver){"
-        "var ro=new ResizeObserver(function(){reportHeight();});"
-        "ro.observe(document.body);"
-        "}"
-        "})();"
-        "</script>"
-    )
-
     out = base_html.replace("</head>", extra_css + "</head>", 1)
     out = out.replace('<main id="groupList">',
                       chart_html + radar_html + vol_html + '<main id="groupList">', 1)
-    out = out.replace("</body>", script + auto_resize_script + "</body>", 1)
+    out = out.replace("</body>", script + "</body>", 1)
     return out
 
 
@@ -1074,8 +1054,8 @@ def main() -> None:
           [data-testid="stVerticalBlock"]{gap:0!important;padding:0!important;}
           [data-testid="element-container"]{padding:0!important;margin:0!important;}
           .block-container{padding:0!important;max-width:100%!important;}
-          .stApp{overflow:hidden;}
-          iframe{display:block!important;border:none!important;margin:0!important;}
+          .stApp{overflow:visible!important;}
+          html,body{overflow:auto!important;margin:0;padding:0;}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -1103,8 +1083,16 @@ def main() -> None:
                 st.caption(e)
 
     html_content = inject_live_script(html_content, payload, stock_groups)
-    page_height  = estimate_page_height(html_content)
-    components.html(html_content, height=page_height, scrolling=True)
+    # 直接注入完整 HTML，讓瀏覽器原生上下捲動（不用 iframe）
+    # 萃取 <head> 內容（styles/links）和 <body> 內容分別注入
+    import re as _re
+    head_match = _re.search(r"<head[^>]*>([\s\S]*?)</head>", html_content, _re.IGNORECASE)
+    body_match = _re.search(r"<body[^>]*>([\s\S]*)</body>", html_content, _re.IGNORECASE)
+    head_inner = head_match.group(1) if head_match else ""
+    body_inner = body_match.group(1) if body_match else html_content
+    # 把 head 裡的 style/link/script 都保留，body 內容直接渲染
+    full_inject = head_inner + body_inner
+    st.markdown(full_inject, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
