@@ -1032,28 +1032,23 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         "</div>"
     )
 
-    # ── 精準回報內容高度（用 getBoundingClientRect 防止 iframe 高度膨脹）──
+    # ── 精準回報內容高度，讓 Streamlit iframe 剛好等於內容（無多餘空白）──
     auto_resize_script = (
         "<script>"
         "(function(){"
-        "function getContentHeight(){"
-        "var els=document.body.querySelectorAll('*');"
-        "var maxBottom=0;"
-        "for(var i=0;i<els.length;i++){"
-        "var r=els[i].getBoundingClientRect();"
-        "if(r.bottom>maxBottom)maxBottom=r.bottom;"
-        "}"
-        "return Math.max(maxBottom,document.body.offsetHeight)+16;"
-        "}"
         "function reportHeight(){"
-        "var h=getContentHeight();"
+        # 用 body 的 scrollHeight，不用 documentElement（避免 iframe 撐高後回報錯誤）
+        "var h=document.body.scrollHeight;"
         "window.parent.postMessage({type:'streamlit:setFrameHeight',height:h},'*');"
         "}"
+        # 頁面載入完畢立即回報
         "if(document.readyState==='complete'){reportHeight();}"
         "else{window.addEventListener('load',reportHeight);}"
-        "document.addEventListener('quotesReady',function(){setTimeout(reportHeight,500);});"
+        # quotesReady 後再回報一次（JS 動態塞完內容後）
+        "document.addEventListener('quotesReady',function(){setTimeout(reportHeight,400);});"
+        # ResizeObserver 監聽 body 尺寸變化（動態內容展開/收合）
         "if(window.ResizeObserver){"
-        "var _ro=new ResizeObserver(function(){setTimeout(reportHeight,100);});"
+        "var _ro=new ResizeObserver(function(){reportHeight();});"
         "_ro.observe(document.body);"
         "}"
         "})();"
@@ -1116,8 +1111,9 @@ def main() -> None:
                 st.caption(e)
 
     html_content = inject_live_script(html_content, payload, stock_groups)
-    # height 給一個小初始值，讓 JS getBoundingClientRect 完全接管精準高度
-    components.html(html_content, height=150, scrolling=False)
+    page_height  = estimate_page_height(html_content)
+    # scrolling=False：iframe 本身不捲，高度由 postMessage 動態撐開，捲動交給瀏覽器整頁
+    components.html(html_content, height=page_height, scrolling=False)
 
 
 if __name__ == "__main__":
