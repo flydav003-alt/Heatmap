@@ -122,6 +122,7 @@ STAGE_FLOW = [
     ("上游", ["IC設計 / IP / ASIC", "晶圓代工 / 功率半導體", "記憶體 / HBM", "矽晶圓 / 材料設備 / 廠務"]),
     ("中游", ["先進封裝 / CoWoS", "封測 / 測試介面", "PCB / 載板 / CCL", "被動元件", "散熱", "電源 / BBU", "高速互連 / 連接器 / 線材"]),
     ("下游", ["AI伺服器 / 機櫃組裝", "網通 / 光通訊 / CPO", "低軌衛星 / SpaceX"]),
+    ("補充", ["半導體其他"]),
 ]
 
 REPRESENTATIVE_GROUPS = {
@@ -778,8 +779,9 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
             heat   = taiwan_heat_color(g["change_avg"])
             accent = GROUP_META[group]["color"]
             tc     = trend_class(g["change_avg"])
+            supp_cls = " supp-cell" if stage_name == "補充" else ""
             cells.append(
-                f'<button class="stage-heat-cell {tc}" data-filter="{html.escape(group)}"'
+                f'<button class="stage-heat-cell{supp_cls} {tc}" data-filter="{html.escape(group)}"'
                 f' style="--accent:{accent};--heat:{heat}">'
                 f'<div class="heat-name">{html.escape(group)}</div>'
                 f'<div class="stage-heat-change">{fmt_pct(g["change_avg"])}</div>'
@@ -1033,6 +1035,9 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       box-shadow: 0 8px 24px rgba(0,0,0,0.40);
       border-color: rgba(255,255,255,0.14);
     }}
+    .supp-cell {{ flex: 0 1 160px; max-width: 180px; opacity: 0.7; }}
+    .supp-cell .heat-name {{ font-size: 10px; }}
+    .supp-cell .stage-heat-change {{ font-size: 16px; }}
     .heat-name {{
       font-size: 11px; font-weight: 600; color: var(--text2);
       line-height: 1.4; margin-bottom: 9px;
@@ -1292,6 +1297,11 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
   }});
 
   applyFilters();
+
+  // inject JS 完成後重跑，確保補充區不漏顯
+  document.addEventListener("quotesReady", function() {{
+    applyFilters();
+  }});
 }})();
 </script>
 </body>
