@@ -687,12 +687,34 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const vrVal = _isIntraday ? ginfo.volRatioAdj : ginfo.volRatio;
       const vrTag = _isIntraday ? "*" : "";
       const vrSmall = vrVal!=null ? `<span class="heat-vr">量比 ${{vrVal.toFixed(2)}}x${{vrTag}}</span>` : `<span class="heat-vr">量比 --</span>`;
-      // 大字顯眼：等級 + 說明文字 + 量比
-      ge.innerHTML=`<span style="font-size:16px;font-weight:900;color:${{GRADE_COLOR[gr]}};
-        background:${{GRADE_BG[gr]}};border:1px solid ${{GRADE_COLOR[gr]}}44;
-        border-radius:5px;padding:2px 7px;letter-spacing:0.04em;">
-        ${{gr}}</span>${{sfx?`<span style="font-size:10px;color:${{GRADE_COLOR[gr]}};margin-left:4px;opacity:0.85">${{sfx}}</span>`:""}}${{vrSmall}}`; 
+      // A 級特殊處理：黑底白字+紅邊框+發光，避免紅字疊紅底看不清
+      const gradeSpanStyle = gr==="A"
+        ? `font-size:16px;font-weight:900;color:#ffffff;
+           background:rgba(10,0,0,0.82);
+           border:2px solid ${{GRADE_COLOR[gr]}};
+           border-radius:5px;padding:2px 8px;letter-spacing:0.06em;
+           text-shadow:0 0 8px rgba(255,102,128,0.7);
+           box-shadow:0 0 10px rgba(255,45,84,0.45),inset 0 0 6px rgba(255,45,84,0.12);`
+        : `font-size:16px;font-weight:900;color:${{GRADE_COLOR[gr]}};
+           background:${{GRADE_BG[gr]}};border:1px solid ${{GRADE_COLOR[gr]}}44;
+           border-radius:5px;padding:2px 7px;letter-spacing:0.04em;`;
+      ge.innerHTML=`<span style="${{gradeSpanStyle}}">${{gr}}</span>${{sfx?`<span style="font-size:10px;color:${{GRADE_COLOR[gr]}};margin-left:4px;opacity:0.85">${{sfx}}</span>`:""}}${{vrSmall}}`; 
     }}
+  }});
+
+  /* ── 熱力格依即時漲幅排序（上中下游各自高到低）────────────────────────── */
+  document.querySelectorAll(".stage-row").forEach(row=>{{
+    const grid=row.querySelector(".heat-grid");
+    if(!grid)return;
+    const cells=Array.from(grid.querySelectorAll(".stage-heat-cell"));
+    cells.sort((a,b)=>{{
+      const ga=groupGrades.get(a.dataset.filter);
+      const gb=groupGrades.get(b.dataset.filter);
+      const va=ga&&ga.avgChange!=null?ga.avgChange:-999;
+      const vb=gb&&gb.avgChange!=null?gb.avgChange:-999;
+      return vb-va;
+    }});
+    cells.forEach(c=>grid.appendChild(c));
   }});
 
   /* ── 輪動主控台 Badges ───────────────────────────────────────────────────── */
