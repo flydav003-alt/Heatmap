@@ -907,9 +907,9 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       --grade-e:  #00d26e;
     }}
 
-    html {{ height: 100%; }}
+    html {{ min-height: 100%; background-color: var(--bg); }}
     body {{
-      min-height: 100%;
+      min-height: 0;
       background-color: var(--bg);
       background-image: radial-gradient(rgba(34,211,238,0.03) 1px, transparent 1px);
       background-size: 28px 28px;
@@ -926,7 +926,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
     ::-webkit-scrollbar-thumb {{ background: var(--muted); border-radius: 3px; }}
     ::-webkit-scrollbar-thumb:hover {{ background: var(--text2); }}
 
-    .wrap {{ max-width: 1680px; margin: 0 auto; padding: 16px 18px 24px; }}
+    .wrap {{ max-width: 1680px; margin: 0 auto; padding: 16px 18px 8px; }}
 
     /* ── Header ────────────────────────────────────────────────────────────── */
     .header {{
@@ -1108,6 +1108,7 @@ def build_html(rows: list[StockRow], meta: dict[str, Any]) -> str:
       border-radius: 12px; overflow: hidden;
       margin-bottom: 10px;
     }}
+    .group-card:last-child {{ margin-bottom: 0; }}
     .group-header {{
       display: flex; justify-content: space-between; align-items: center;
       padding: 12px 16px; gap: 12px;
