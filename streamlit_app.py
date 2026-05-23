@@ -141,8 +141,10 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
 def estimate_page_height(base_html: str) -> int:
     num_rows   = base_html.count('data-code="')
     num_groups = base_html.count('class="group-card"')
-    # 精確估算：固定頁首約 520px + 每族群標題 90px + 每列 52px + 底部安全邊距 20px
-    return 520 + num_groups * 90 + num_rows * 52 + 20
+    # Initial iframe height only. The injected ResizeObserver below reports the
+    # exact content height after render; keep this estimate close so the browser
+    # scrollbar is not inflated before the first resize message lands.
+    return 760 + num_groups * 66 + num_rows * 36 + 16
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
@@ -941,6 +943,16 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     # ── 額外 CSS（熱力格大字等級 + 折線圖 + 雷達卡片）──────────────────────
     extra_css = """
 <style>
+html, body {
+  height:auto!important;
+  min-height:0!important;
+  overflow:visible!important;
+}
+body { margin:0!important; }
+.wrap { padding-bottom:8px!important; }
+#groupList { margin-bottom:0!important; padding-bottom:0!important; }
+.group-card:last-child { margin-bottom:0!important; }
+
 /* 熱力格 grade 覆寫：讓 [A] 等文字更大更顯眼（已在 JS innerHTML 處理，這裡補 flex） */
 .heat-grade { display:flex; align-items:center; gap:4px; margin-top:6px; }
 
@@ -1036,21 +1048,36 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     auto_resize_script = (
         "<script>"
         "(function(){"
+        "var raf=0;"
+        "function contentHeight(){"
+        "var el=document.querySelector('.wrap')||document.body;"
+        "var rect=el.getBoundingClientRect();"
+        "return Math.ceil(Math.max(el.scrollHeight,rect.bottom))+2;"
+        "}"
         "function reportHeight(){"
-        # 用 body 的 scrollHeight，不用 documentElement（避免 iframe 撐高後回報錯誤）
-        "var h=document.body.scrollHeight;"
-        "window.parent.postMessage({type:'streamlit:setFrameHeight',height:h},'*');"
+        "var h=contentHeight();"
+        "window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:h},'*');"
+        "}"
+        "function schedule(){"
+        "if(raf)cancelAnimationFrame(raf);"
+        "raf=requestAnimationFrame(reportHeight);"
         "}"
         # 頁面載入完畢立即回報
-        "if(document.readyState==='complete'){reportHeight();}"
-        "else{window.addEventListener('load',reportHeight);}"
+        "if(document.readyState==='complete'){schedule();}"
+        "else{window.addEventListener('load',schedule);}"
         # quotesReady 後再回報一次（JS 動態塞完內容後）
-        "document.addEventListener('quotesReady',function(){setTimeout(reportHeight,400);});"
+        "document.addEventListener('quotesReady',function(){setTimeout(schedule,400);});"
+        "document.addEventListener('input',function(){setTimeout(schedule,80);},true);"
+        "document.addEventListener('click',function(){setTimeout(schedule,80);},true);"
         # ResizeObserver 監聽 body 尺寸變化（動態內容展開/收合）
         "if(window.ResizeObserver){"
-        "var _ro=new ResizeObserver(function(){reportHeight();});"
+        "var _ro=new ResizeObserver(schedule);"
         "_ro.observe(document.body);"
+        "var _wrap=document.querySelector('.wrap');"
+        "if(_wrap)_ro.observe(_wrap);"
         "}"
+        "setTimeout(schedule,50);"
+        "setTimeout(schedule,500);"
         "})();"
         "</script>"
     )
@@ -1079,9 +1106,10 @@ def main() -> None:
           [data-testid="element-container"]{padding:0!important;margin:0!important;}
           .block-container{padding:0!important;max-width:100%!important;}
           /* 讓整個 Streamlit 頁面可以跟著 iframe 高度自然撐開並捲動 */
-          html,body{overflow:auto!important;height:auto!important;}
-          .stApp{overflow:visible!important;height:auto!important;}
-          [data-testid="stAppViewContainer"]{overflow:visible!important;height:auto!important;}
+          html,body{overflow:auto!important;height:auto!important;min-height:0!important;}
+          .stApp{overflow:visible!important;height:auto!important;min-height:0!important;}
+          [data-testid="stAppViewContainer"]{overflow:visible!important;height:auto!important;min-height:0!important;}
+          section.main{overflow:visible!important;}
           /* iframe 本身不要有邊框或多餘空間 */
           iframe{display:block!important;border:none!important;margin:0!important;padding:0!important;}
         </style>""",
