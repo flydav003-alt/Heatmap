@@ -471,43 +471,57 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       else if(vr4grade>=1.0) sVol=3;
     }} else {{ sVol=5; }} // 無資料給小中性分
 
-    let grade="D";
+    const isExit =
+      avgChange<-1.0 ||
+      (breadth!=null&&breadth<25);
 
-    // E 級：退潮（強制，最優先）
-    // 條件：均跌 > 1% 或廣度 < 25%（超過四分之三的股在跌）
-    if(avgChange<-1.0||(breadth!=null&&breadth<25)){{
-      grade="E";
-    }}
-    // A 級：「絕對強」＋「相對明顯領先板塊」
-    // 條件：漲幅≥1.5% + 廣度≥60% + 超板塊均值0.8%以上
-    else if(
+    const isLeader =
       avgChange>=1.5 &&
       (breadth==null||breadth>=60) &&
       relChange>=0.8 &&
-      (relBreadth==null||relBreadth>=-5)
-    ){{
+      (relBreadth==null||relBreadth>=-5);
+
+    const isLowBaseAccumulation =
+      vr4grade!=null && vr4grade>=1.2 &&
+      drawdown!=null && drawdown<-8 &&
+      (mom5d==null || mom5d<5);
+
+    const isBroadening =
+      avgChange>=0.8 &&
+      (breadth==null||breadth>=55) &&
+      relChange>=0 &&
+      (relBreadth==null||relBreadth>=-5);
+
+    let grade="D";
+    let gradeReason="整理觀察";
+
+    // E 級：退潮（強制，最優先）
+    // 條件：均跌 > 1% 或廣度 < 25%（超過四分之三的股在跌）
+    if(isExit){{
+      grade="E";
+      gradeReason="退潮";
+    }}
+    // A 級：「絕對強」＋「相對明顯領先板塊」
+    // 條件：漲幅≥1.5% + 廣度≥60% + 超板塊均值0.8%以上
+    else if(isLeader){{
       grade="A";
+      gradeReason="領漲";
     }}
     // B 級：「絕對不弱」＋「不落後板塊太多」
-    // 條件：漲幅≥0.5% + 廣度≥45% + 不落後板塊均值0.3%以上
-    else if(
-      avgChange>=0.5 &&
-      (breadth==null||breadth>=45) &&
-      relChange>=-0.3
-    ){{
+    // 條件收緊：漲幅≥0.8% + 廣度≥55% + 至少不輸板塊均值
+    else if(isBroadening){{
       grade="B";
+      gradeReason="擴散";
     }}
     // C 級：低基期量能蓄力型
-    // 定義：漲幅偏弱（未達B級），但量能相對放大 + 距20日高點回檔深 + 近5日未爆發
+    // 定義：量能相對放大 + 距20日高點回檔深 + 近5日未爆發。
+    // 放在 B 後面，維持 A/B/C/D 的強弱層級；B 收緊後，低基期族群不會被寬鬆 B 全吃掉。
     // 代表意義：資金悄悄進場，可能是下一棒輪動目標
     // 注意：drawdown/mom5d 來自 build 預埋的歷史資料，yfinance沒跑到就是null→條件失敗→維持D
     //       vr4grade 是推估量比，盤中用時間修正後的值
-    else if(
-      vr4grade!=null && vr4grade>=1.2 &&
-      drawdown!=null && drawdown<-8 &&
-      (mom5d==null || mom5d<5)
-    ){{
+    else if(isLowBaseAccumulation){{
       grade="C";
+      gradeReason="低基期蓄力";
     }}
     // D 級：橫盤整理（預設）
     // 代表意義：量縮、廣度低、沒有明顯方向，靜待觀察
@@ -518,7 +532,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       avgChange, breadth,
       volRatio, volRatioAdj, vr4grade,
       relChange, relBreadth, relVolR,
-      mom5d, drawdown, hasVol,
+      mom5d, drawdown, hasVol, gradeReason,
       stat
     }});
   }});
@@ -530,6 +544,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     debugRows.push({{
       族群:g.split(" / ")[0],
       等級:gi.grade,
+      原因:gi.gradeReason,
       量比分:`${{gi.sVol}}` ,相對漲幅:`${{gi.relChange!=null?gi.relChange.toFixed(2)+"%":"--"}}` ,相對廣度:`${{gi.relBreadth!=null?gi.relBreadth.toFixed(0)+"%":"--"}}`,
       均漲幅:gi.avgChange!=null?gi.avgChange.toFixed(2)+"%":"--",
       廣度:gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--",
