@@ -83,7 +83,8 @@ def _find_otc_revenue_url() -> str | None:
 RELEVANT_LISTED_INDUSTRIES = {"半導體業"}
 
 GROUP_ORDER = [
-    "IC設計 / IP / ASIC",
+    "矽智財與高階 ASIC",
+    "消費性 / 常規 IC設計",
     "晶圓代工 / 功率半導體",
     "先進封裝 / CoWoS",
     "封測 / 測試介面",
@@ -95,15 +96,16 @@ GROUP_ORDER = [
     "AI伺服器 / 機櫃組裝",
     "散熱",
     "電源 / BBU",
-    "網通 / 光通訊 / CPO",
+    "CPO / 矽光子",
+    "網通 / 交換器 / 寬頻設備",
     "光學 / 影像 / 顯示",
     "低軌衛星 / SpaceX",
     "高速互連 / 連接器 / 線材",
-    "半導體其他",
 ]
 
 GROUP_META = {
-    "IC設計 / IP / ASIC":       {"stage": "上游", "desc": "AI GPU、交換晶片、BMC、IP 與客製 ASIC 的邏輯源頭。",           "color": "#8b5cf6"},
+    "矽智財與高階 ASIC":        {"stage": "上游", "desc": "IP、EDA、BMC、高階 ASIC 與雲端自研晶片設計，較貼近 CSP 資本支出循環。", "color": "#8b5cf6"},
+    "消費性 / 常規 IC設計":     {"stage": "上游", "desc": "驅動 IC、網通 IC、MCU、控制晶片與一般 fabless 設計，景氣循環敏感度較高。", "color": "#a78bfa"},
     "晶圓代工 / 功率半導體":     {"stage": "上游", "desc": "把設計真正做成晶片，涵蓋晶圓代工、功率元件與控制晶片量產。", "color": "#3b82f6"},
     "先進封裝 / CoWoS":          {"stage": "中游", "desc": "承接 CoWoS、先進封裝、封裝材料與相關設備耗材。",             "color": "#ec4899"},
     "封測 / 測試介面":            {"stage": "中游", "desc": "後段封裝、測試、Probe Card、Socket 與可靠度驗證。",           "color": "#f59e0b"},
@@ -115,18 +117,17 @@ GROUP_META = {
     "AI伺服器 / 機櫃組裝":       {"stage": "下游", "desc": "GPU / ASIC、主機板、電源、散熱與機構整合成整機與機櫃。",    "color": "#f43f5e"},
     "散熱":                       {"stage": "中游", "desc": "高瓦數 GPU 機櫃的風冷、液冷、均熱與機構散熱模組。",          "color": "#38bdf8"},
     "電源 / BBU":                 {"stage": "中游", "desc": "伺服器 PSU、電源管理、BBU 與備援電力。",                     "color": "#f97316"},
-    "網通 / 光通訊 / CPO":       {"stage": "下游", "desc": "交換器、光模組、矽光子與 CPO，讓 AI 叢集真正跑得起來。",    "color": "#0ea5e9"},
+    "CPO / 矽光子":               {"stage": "下游", "desc": "CPO、矽光子、光模組與高速光通訊元件，對 AI 算力基礎設施彈性最高。", "color": "#0ea5e9"},
+    "網通 / 交換器 / 寬頻設備":  {"stage": "下游", "desc": "交換器、寬頻路由器、網通設備與傳統通訊基礎建設。",            "color": "#0284c7"},
     "光學 / 影像 / 顯示":        {"stage": "下游", "desc": "AI 視覺、車用鏡頭、影像感測、顯示與檢測應用的延伸題材。",    "color": "#14b8a6"},
     "低軌衛星 / SpaceX":         {"stage": "下游", "desc": "Starlink / Kuiper 衛星本體、射頻元件、地面接收站與雷射通訊，台廠深度切入全球低軌衛星供應鏈。", "color": "#6366f1"},
     "高速互連 / 連接器 / 線材":  {"stage": "中游", "desc": "板內、板間、機櫃間的高速與高功率傳輸。",                    "color": "#22c55e"},
-    "半導體其他":                 {"stage": "補充", "desc": "官方半導體產業別完整保留，但未手動歸到前述主題。",            "color": "#64748b"},
 }
 
 STAGE_FLOW = [
-    ("上游", ["IC設計 / IP / ASIC", "晶圓代工 / 功率半導體", "記憶體 / HBM", "電源管理 / 類比 IC", "矽晶圓 / 材料設備 / 廠務"]),
+    ("上游", ["矽智財與高階 ASIC", "消費性 / 常規 IC設計", "晶圓代工 / 功率半導體", "記憶體 / HBM", "電源管理 / 類比 IC", "矽晶圓 / 材料設備 / 廠務"]),
     ("中游", ["先進封裝 / CoWoS", "封測 / 測試介面", "PCB / 載板 / CCL", "被動元件", "散熱", "電源 / BBU", "高速互連 / 連接器 / 線材"]),
-    ("下游", ["AI伺服器 / 機櫃組裝", "網通 / 光通訊 / CPO", "光學 / 影像 / 顯示", "低軌衛星 / SpaceX"]),
-    ("補充", ["半導體其他"]),
+    ("下游", ["AI伺服器 / 機櫃組裝", "CPO / 矽光子", "網通 / 交換器 / 寬頻設備", "光學 / 影像 / 顯示", "低軌衛星 / SpaceX"]),
 ]
 
 REPRESENTATIVE_GROUPS = {
@@ -144,10 +145,13 @@ REPRESENTATIVE_GROUPS = {
 }
 
 MANUAL_GROUPS = {
-    "IC設計 / IP / ASIC": [
-        "2454", "3035", "2379", "3443", "3661", "6526", "5269",
-        "3529", "4919", "2401", "3041", "5274",
-        "2363", "6643", "8227", "6533",
+    "矽智財與高階 ASIC": [
+        "2454", "3035", "3443", "3661", "6526", "5269",
+        "3529", "5274", "6643", "6533",
+    ],
+    "消費性 / 常規 IC設計": [
+        "2379", "4919", "2401", "3041",
+        "2363", "8227",
         "2388", "3014", "3094", "3122", "3135", "3169", "3228", "3259",
         "4952", "4968", "5272",
         "5471", "6103", "6104", "6129", "6202", "6229", "6233", "6237", "6243",
@@ -204,6 +208,7 @@ MANUAL_GROUPS = {
         "2317", "3231", "2382", "6669", "2356", "3706", "4938", "8210", "3013", "2395",
         "6414", "6166", "3088", "8050", "3022", "3416", "2324",
         "2353", "2354", "2357", "2376", "2377", "2385", "3515", "6117", "6933", "7711",
+        "2059", "2281",
     ],
     "散熱": [
         "3017", "3324", "2421", "3653", "4931", "6230", "6831",
@@ -214,10 +219,12 @@ MANUAL_GROUPS = {
         "2308", "6409", "6412", "6282", "6121", "3211",
         "2301", "2420", "2457", "3015", "3617", "6781",
     ],
-    "網通 / 光通訊 / CPO": [
-        "2345", "5388", "3596", "6285", "4906", "3450", "4979", "3163", "3363", "3081",
-        "4908", "6442", "6451",
+    "CPO / 矽光子": [
+        "4979", "3163", "6451", "4908", "6442", "3450", "3596", "3363", "3081",
         "5222", "5487", "7770", "7772",
+    ],
+    "網通 / 交換器 / 寬頻設備": [
+        "2345", "5388", "6285", "4906",
         "2455", "3047", "3380", "3704", "4977", "6416",
         # 從「IC設計」移入：光通訊驅動IC設計，主題純度屬光通訊族群
         "5468",  # 凱鈺：光通訊IC / 驅動IC / LED驅動IC 設計（鈺創轉投資，光通訊主題純度高）
@@ -633,7 +640,7 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
     latest_revenue_month = max(x for x in [listed_month, otc_month] if x)
 
     listed_semi_codes = {code for code, row in listed_revenue.items() if row.get("industry") in RELEVANT_LISTED_INDUSTRIES}
-    selected_codes    = listed_semi_codes | otc_semi_codes | set(GROUP_BY_CODE)
+    selected_codes    = set(GROUP_BY_CODE)
     listed_codes      = sorted(code for code in selected_codes if code in listed_prices)
 
     listed_financial: dict[str, dict[str, Any]] = {}
@@ -654,7 +661,7 @@ def build_rows() -> tuple[list[StockRow], dict[str, Any]]:
     for code in sorted(selected_codes):
         market      = "上市" if code in listed_prices else "上櫃"
         is_core_semi = code in listed_semi_codes or code in otc_semi_codes
-        group       = GROUP_BY_CODE.get(code) or ("半導體其他" if is_core_semi else None)
+        group       = GROUP_BY_CODE.get(code)
         if not group:
             continue
         stage = GROUP_META[group]["stage"]
