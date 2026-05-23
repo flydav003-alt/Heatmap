@@ -555,6 +555,23 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
   }});
   console.table(debugRows);
 
+  function jumpToGroup(group){{
+    if(!group)return;
+    const pill=document.querySelector(`.pill[data-filter="${{CSS.escape(group)}}"]`);
+    if(pill) pill.click();
+    setTimeout(()=>{{
+      const target=document.querySelector(`.group-card[data-group="${{CSS.escape(group)}}"]`);
+      if(!target)return;
+      target.scrollIntoView({{behavior:"smooth",block:"start"}});
+      target.classList.add("jump-focus");
+      setTimeout(()=>target.classList.remove("jump-focus"),1400);
+    }},80);
+  }}
+
+  document.querySelectorAll(".stage-heat-cell[data-filter]").forEach(cell=>{{
+    cell.addEventListener("click",()=>jumpToGroup(cell.dataset.filter));
+  }});
+
   /* ── KPI ─────────────────────────────────────────────────────────────────── */
   const avg=totalCount?totalChange/totalCount:null;
   const kpiVals=document.querySelectorAll(".kpi .value");
@@ -681,7 +698,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const bd=gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--";
       const reason=thesis[gi.grade]||"觀察族群量價是否同步轉強。";
       return `
-        <div class="next-wave-card" style="border-top-color:${{gradeColor}}">
+        <div class="next-wave-card" data-jump-group="${{x.group}}" style="border-top-color:${{gradeColor}}">
           <div class="next-wave-top">
             <span class="next-wave-rank" style="background:${{gradeColor}}">${{i+1}}</span>
             <span class="next-wave-grade" style="color:${{gradeColor}};border-color:${{gradeColor}}55">${{gi.grade}}級 · ${{gi.gradeReason||""}}</span>
@@ -696,6 +713,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           </div>
         </div>`;
     }}).join(""):`<div style="color:#3d5470;font-size:12px;padding:12px 0">目前沒有明確下一棒候選。</div>`;
+    nextWaveEl.querySelectorAll(".next-wave-card[data-jump-group]").forEach(card=>{{
+      card.addEventListener("click",()=>jumpToGroup(card.dataset.jumpGroup));
+    }});
   }}
 
   /* ── 末升段警戒 ──────────────────────────────────────────────────────────── */
@@ -1013,6 +1033,9 @@ body { margin:0!important; }
 .wrap { padding-bottom:8px!important; }
 #groupList { margin-bottom:0!important; padding-bottom:0!important; }
 .group-card:last-child { margin-bottom:0!important; }
+.group-card.jump-focus {
+  box-shadow:0 0 0 1px rgba(34,211,238,0.55),0 0 28px rgba(34,211,238,0.22)!important;
+}
 
 /* 熱力格 grade 覆寫：讓 [A] 等文字更大更顯眼（已在 JS innerHTML 處理，這裡補 flex） */
 .heat-grade { display:flex; align-items:center; gap:4px; margin-top:6px; }
@@ -1054,6 +1077,12 @@ body { margin:0!important; }
   border-radius:12px;
   padding:12px 13px 11px;
   min-height:142px;
+  cursor:pointer;
+  transition:transform .12s,box-shadow .12s,border-color .12s;
+}
+.next-wave-card:hover {
+  transform:translateY(-2px);
+  box-shadow:0 10px 24px rgba(34,211,238,0.14);
 }
 .next-wave-top {
   display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;
