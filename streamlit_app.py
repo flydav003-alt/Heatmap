@@ -984,6 +984,70 @@ body { margin:0!important; }
   font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;
   color:#3d5470;font-style:italic;
 }
+#next-wave-board {
+  padding: 0 18px 16px;
+}
+.next-wave-label {
+  font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:#22d3ee;margin-bottom:10px;display:flex;align-items:center;gap:8px;
+}
+.next-wave-label .nw-sub {
+  font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;
+  color:#3d5470;font-style:italic;
+}
+#next-wave-cards {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:10px;
+}
+.next-wave-card {
+  background:
+    linear-gradient(155deg, rgba(34,211,238,0.08) 0%, rgba(34,211,238,0.01) 42%, transparent 80%),
+    #070d1a;
+  border:1px solid rgba(255,255,255,0.07);
+  border-top:2px solid #22d3ee;
+  border-radius:12px;
+  padding:12px 13px 11px;
+  min-height:142px;
+}
+.next-wave-top {
+  display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;
+}
+.next-wave-rank {
+  width:24px;height:24px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+  color:#04080f;background:#22d3ee;flex:0 0 24px;
+}
+.next-wave-grade {
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+  padding:3px 7px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);
+  white-space:nowrap;
+}
+.next-wave-title {
+  font-size:15px;font-weight:700;line-height:1.25;margin-bottom:4px;
+}
+.next-wave-meta {
+  font-size:10px;color:#7a9bbb;display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;
+}
+.next-wave-thesis {
+  font-size:11px;color:#d7e6fa;line-height:1.45;min-height:32px;margin-bottom:9px;
+}
+.next-wave-metrics {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;
+}
+.nw-metric {
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.05);
+  border-radius:8px;
+  padding:6px 7px;
+  min-width:0;
+}
+.nw-k {
+  font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#58708f;margin-bottom:3px;
+}
+.nw-v {
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#ddeeff;
+}
 #rotation-chart {
   background: #070d1a;
   border:1px solid rgba(255,255,255,0.06);
