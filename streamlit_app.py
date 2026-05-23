@@ -15,6 +15,7 @@ import yfinance as yf
 
 ROOT      = Path(__file__).resolve().parent
 HTML_PATH = ROOT / "docs" / "index.html"
+LOCAL_HTML_PATH = ROOT / "index.html"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def parse_float(value: Any) -> float | None:
@@ -144,7 +145,7 @@ def estimate_page_height(base_html: str) -> int:
     # Initial iframe height only. The injected ResizeObserver below reports the
     # exact content height after render where Streamlit accepts the message. Keep
     # the fallback generous enough to avoid clipping, without the old huge tail.
-    return 980 + num_groups * 108 + num_rows * 42 + 16
+    return 680 + num_groups * 108 + num_rows * 42 + 16
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
@@ -1116,11 +1117,12 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    if not HTML_PATH.exists():
-        st.error(f"❌ 找不到 `{HTML_PATH}`\n\n請確認 GitHub Actions 已成功執行並 commit `docs/index.html`。")
+    html_path = HTML_PATH if HTML_PATH.exists() else LOCAL_HTML_PATH
+    if not html_path.exists():
+        st.error(f"❌ 找不到 `{HTML_PATH}` 或 `{LOCAL_HTML_PATH}`\n\n請先產生 index.html。")
         st.stop()
 
-    html_content = HTML_PATH.read_text(encoding="utf-8")
+    html_content = html_path.read_text(encoding="utf-8")
     symbols = tuple((item["code"], item["exchange"]) for item in extract_symbols(html_content))
     stock_groups = extract_stock_groups(html_content)
 
