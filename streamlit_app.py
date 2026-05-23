@@ -139,12 +139,12 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
 
 
 def estimate_page_height(base_html: str) -> int:
-    num_rows   = base_html.count('data-code="')
-    num_groups = base_html.count('class="group-card"')
+    num_rows   = len(re.findall(r"<tr\s+data-code=", base_html))
+    num_groups = len(re.findall(r'class="group-card"', base_html))
     # Initial iframe height only. The injected ResizeObserver below reports the
-    # exact content height after render; keep this estimate close so the browser
-    # scrollbar is not inflated before the first resize message lands.
-    return 760 + num_groups * 66 + num_rows * 36 + 16
+    # exact content height after render where Streamlit accepts the message. Keep
+    # the fallback generous enough to avoid clipping, without the old huge tail.
+    return 980 + num_groups * 108 + num_rows * 42 + 16
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
