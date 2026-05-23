@@ -145,7 +145,7 @@ def estimate_page_height(base_html: str) -> int:
     # Initial iframe height only. The injected ResizeObserver below reports the
     # exact content height after render where Streamlit accepts the message. Keep
     # the fallback generous enough to avoid clipping, without the old huge tail.
-    return 680 + num_groups * 108 + num_rows * 42 + 16
+    return 860 + num_groups * 108 + num_rows * 42 + 16
 
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
@@ -653,6 +653,51 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       :`<span class="r-empty" style="color:#3d5470">目前無 A/B/C 級訊號，盤面平靜</span>`;
   }}
 
+  /* ── 下一棒候選：把 C/B 族群轉成可掃描的觀察清單 ───────────────────────── */
+  const nextWaveEl=document.getElementById("next-wave-cards");
+  if(nextWaveEl){{
+    const gradeBase={{C:70,B:56,A:38,D:18,E:0}};
+    const thesis={{C:"低位階放量，還沒大漲，適合盯是否升級成 B。",B:"族群擴散轉強，適合找同族補漲與龍頭續航。",A:"已是主流領漲，偏確認行情，不是早期卡位。",D:"訊號不足，先等量能或廣度改善。",E:"退潮風險優先，暫不列入下一棒。"}};
+    const candidates=[];
+    groupGrades.forEach((gi,group)=>{{
+      if(gi.grade==="E") return;
+      const vr = _isIntraday ? gi.volRatioAdj : gi.volRatio;
+      const volScore = vr!=null ? Math.min(vr*8,22) : 4;
+      const ddScore = gi.drawdown!=null && gi.drawdown<0 ? Math.min(Math.abs(gi.drawdown),18) : 0;
+      const breadthScore = gi.breadth!=null ? Math.min(Math.max(gi.breadth-40,0)/2,18) : 6;
+      const relScore = gi.relChange!=null ? Math.max(Math.min(gi.relChange*4,12),-8) : 0;
+      const notOverheated = gi.mom5d==null || gi.mom5d<5 ? 8 : -10;
+      const score = (gradeBase[gi.grade]||0)+volScore+ddScore+breadthScore+relScore+notOverheated;
+      candidates.push({{group,gi,score,vr}});
+    }});
+    candidates.sort((a,b)=>b.score-a.score);
+    const top=candidates.slice(0,4);
+    nextWaveEl.innerHTML=top.length?top.map((x,i)=>{{
+      const gi=x.gi;
+      const gradeColor=GRADE_COLOR[gi.grade]||"#7a9bbb";
+      const stage=STAGE_LABEL[gi.stage]||gi.stage||"--";
+      const vr=x.vr!=null?x.vr.toFixed(2)+"x":"--";
+      const dd=gi.drawdown!=null?gi.drawdown.toFixed(1)+"%":"--";
+      const bd=gi.breadth!=null?gi.breadth.toFixed(0)+"%":"--";
+      const reason=thesis[gi.grade]||"觀察族群量價是否同步轉強。";
+      return `
+        <div class="next-wave-card" style="border-top-color:${{gradeColor}}">
+          <div class="next-wave-top">
+            <span class="next-wave-rank" style="background:${{gradeColor}}">${{i+1}}</span>
+            <span class="next-wave-grade" style="color:${{gradeColor}};border-color:${{gradeColor}}55">${{gi.grade}}級 · ${{gi.gradeReason||""}}</span>
+          </div>
+          <div class="next-wave-title">${{x.group}}</div>
+          <div class="next-wave-meta"><span>${{stage}}</span><span>Score ${{Math.round(x.score)}}</span></div>
+          <div class="next-wave-thesis">${{reason}}</div>
+          <div class="next-wave-metrics">
+            <div class="nw-metric"><div class="nw-k">量比</div><div class="nw-v">${{vr}}</div></div>
+            <div class="nw-metric"><div class="nw-k">廣度</div><div class="nw-v">${{bd}}</div></div>
+            <div class="nw-metric"><div class="nw-k">位階</div><div class="nw-v">${{dd}}</div></div>
+          </div>
+        </div>`;
+    }}).join(""):`<div style="color:#3d5470;font-size:12px;padding:12px 0">目前沒有明確下一棒候選。</div>`;
+  }}
+
   /* ── 末升段警戒 ──────────────────────────────────────────────────────────── */
   const warnBox=document.getElementById("warningBox");
   const warnDetail=document.getElementById("warningDetail");
@@ -1106,6 +1151,14 @@ body { margin:0!important; }
         "</div>"
     )
 
+    next_wave_html = (
+        '<div id="next-wave-board">'
+        '<div class="next-wave-label">下一棒候選'
+        '<span class="nw-sub">依等級、量比、廣度、低位階與近期漲幅排序</span></div>'
+        '<div id="next-wave-cards"><div style="color:#3d5470;font-size:12px;padding:8px">計算中…</div></div>'
+        "</div>"
+    )
+
     # 折線圖區塊
     chart_html = (
         '<div class="rotation-chart-wrap">'
@@ -1164,7 +1217,7 @@ body { margin:0!important; }
 
     out = base_html.replace("</head>", extra_css + "</head>", 1)
     out = out.replace('<main id="groupList">',
-                      chart_html + radar_html + vol_html + '<main id="groupList">', 1)
+                      next_wave_html + chart_html + radar_html + vol_html + '<main id="groupList">', 1)
     out = out.replace("</body>", script + auto_resize_script + "</body>", 1)
     return out
 
