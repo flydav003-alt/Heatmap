@@ -62,7 +62,7 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     latest_time = now.strftime("%H:%M:%S")
     latest_date = now.strftime("%Y-%m-%d")
 
-    def _batch_download(tickers: list[str], period: str = "7d") -> Any:
+    def _batch_download(tickers: list[str], period: str = "45d") -> Any:
         try:
             return yf.download(
                 tickers=tickers, period=period,
@@ -96,6 +96,16 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
             chg_pct = ((price / prev_close - 1) * 100) if prev_close and prev_close != 0 else None
             vol_shares = float(volume.iloc[-1]) if len(volume) >= 1 else None
             vol_lots   = vol_shares / 1000 if vol_shares else None
+            vol_tail = volume.tail(20)
+            avg_vol20 = float(vol_tail.mean() / 1000) if len(vol_tail) >= 5 else None
+            if len(close) >= 6:
+                p5_close = float(close.iloc[-6])
+            elif len(close) >= 2:
+                p5_close = float(close.iloc[0])
+            else:
+                p5_close = None
+            close_tail = close.tail(20)
+            p20_high = float(close_tail.max()) if len(close_tail) >= 1 else None
 
             # 5日收盤序列（供折線圖）: [{date, close}, ...]
             history_5d = []
@@ -111,6 +121,9 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
                 "price":       price,
                 "change_pct":  chg_pct,
                 "volume_lots": vol_lots,
+                "avg_vol20":   avg_vol20,
+                "p5_close":    p5_close,
+                "p20_high":    p20_high,
                 "history_5d":  history_5d,
                 "time":        latest_time,
                 "date":        latest_date,
@@ -118,9 +131,30 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         except Exception:
             return None
 
-    # period="7d" 抓7天確保有5個交易日
-    raw_tw  = _batch_download(tw_tickers,  period="7d")
-    raw_two = _batch_download(two_tickers, period="7d")
+    def _extract_history_5d(raw: Any, ticker: str) -> list[dict[str, Any]]:
+        try:
+            if raw is None or raw.empty:
+                return []
+            if isinstance(raw.columns, pd.MultiIndex):
+                if ticker not in raw.columns.get_level_values(0):
+                    return []
+                df = raw[ticker]
+            else:
+                df = raw
+            close = df["Close"].dropna()
+            history_5d = []
+            for ts, v in close.tail(5).items():
+                d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[:10]
+                history_5d.append({"d": d, "c": round(float(v), 2)})
+            return history_5d
+        except Exception:
+            return []
+
+    # period="45d" 同時供即時報價、20日均量、5日輪動與20日高點使用
+    raw_tw  = _batch_download(tw_tickers,  period="45d")
+    raw_two = _batch_download(two_tickers, period="45d")
+    raw_idx = _batch_download(["^TWII"], period="45d")
+    market_history_5d = _extract_history_5d(raw_idx, "^TWII")
 
     for code in all_codes:
         q = _extract_quote(raw_tw,  f"{code}.TW")
@@ -135,6 +169,7 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
         "latest_date":     latest_date,
         "fetched_count":   len(quotes),
         "requested_count": len(symbols),
+        "market_history_5d": market_history_5d,
         "errors":          [],
     }
 
@@ -150,7 +185,8 @@ def estimate_page_height(base_html: str) -> int:
 
 # ── GROUP META ─────────────────────────────────────────────────────────────────
 GROUP_STAGE_MAP = {
-    "IC設計 / IP / ASIC":      "上游",
+    "矽智財與高階 ASIC":       "上游",
+    "消費性 / 常規 IC設計":    "上游",
     "晶圓代工 / 功率半導體":    "上游",
     "記憶體 / HBM":             "上游",
     "電源管理 / 類比 IC":        "上游",
@@ -163,13 +199,14 @@ GROUP_STAGE_MAP = {
     "電源 / BBU":                "中游",
     "高速互連 / 連接器 / 線材": "中游",
     "AI伺服器 / 機櫃組裝":      "下游",
-    "網通 / 光通訊 / CPO":      "下游",
+    "CPO / 矽光子":              "下游",
+    "網通 / 交換器 / 寬頻設備": "下游",
     "光學 / 影像 / 顯示":       "下游",
     "低軌衛星 / SpaceX":        "下游",
-    "半導體其他":                "補充",
 }
 GROUP_COLOR_MAP = {
-    "IC設計 / IP / ASIC":      "#8b5cf6",
+    "矽智財與高階 ASIC":       "#8b5cf6",
+    "消費性 / 常規 IC設計":    "#a78bfa",
     "晶圓代工 / 功率半導體":    "#3b82f6",
     "先進封裝 / CoWoS":         "#ec4899",
     "封測 / 測試介面":           "#f59e0b",
@@ -181,16 +218,16 @@ GROUP_COLOR_MAP = {
     "AI伺服器 / 機櫃組裝":       "#f43f5e",
     "散熱":                       "#38bdf8",
     "電源 / BBU":                 "#f97316",
-    "網通 / 光通訊 / CPO":       "#0ea5e9",
+    "CPO / 矽光子":               "#0ea5e9",
+    "網通 / 交換器 / 寬頻設備":  "#0284c7",
     "光學 / 影像 / 顯示":        "#14b8a6",
     "低軌衛星 / SpaceX":         "#6366f1",
     "高速互連 / 連接器 / 線材":  "#22c55e",
-    "半導體其他":                 "#64748b",
 }
 
-CORE_UPSTREAM     = {"IC設計 / IP / ASIC", "晶圓代工 / 功率半導體"}
+CORE_UPSTREAM     = {"矽智財與高階 ASIC", "晶圓代工 / 功率半導體"}
 LAGGARD_GROUPS    = {"被動元件"}
-DOWNSTREAM_GROUPS = {"AI伺服器 / 機櫃組裝", "網通 / 光通訊 / CPO"}
+DOWNSTREAM_GROUPS = {"AI伺服器 / 機櫃組裝", "CPO / 矽光子"}
 
 
 # ── 建立「個股群組對應」快取（從 HTML 解析）──────────────────────────────────
@@ -217,6 +254,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
   "use strict";
   const payload     = {live_json};
   const quotes      = payload.quotes || {{}};
+  const MARKET_HISTORY_5D = payload.market_history_5d || [];
   const GROUP_STAGE = {stage_map_json};
   const GROUP_COLOR = {color_map_json};
   const STOCK_GROUP = {stock_groups_json};
@@ -279,9 +317,12 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     if(changePct!=null&&nums[1]){{nums[1].textContent=fmtPct(changePct);nums[1].className=`num ${{trend(changePct)}}`;}}
     if(volume   !=null&&nums[2]) nums[2].textContent=fmtYi(volume, price);
 
-    const avgVol20=safe(row.dataset.avgVol20);
-    const p5close =safe(row.dataset.p5Close);
-    const p20high =safe(row.dataset.p20High);
+    let avgVol20=safe(row.dataset.avgVol20);
+    let p5close =safe(row.dataset.p5Close);
+    let p20high =safe(row.dataset.p20High);
+    if(avgVol20==null && quote && quote.avg_vol20!=null && isFinite(+quote.avg_vol20)) avgVol20=+quote.avg_vol20;
+    if(p5close ==null && quote && quote.p5_close !=null && isFinite(+quote.p5_close))  p5close =+quote.p5_close;
+    if(p20high ==null && quote && quote.p20_high !=null && isFinite(+quote.p20_high))  p20high =+quote.p20_high;
 
     // history_5d 讀取優先順序：
     // 1. build 預埋的 data-history-5d（最穩定，每天 build 時固定）
@@ -317,7 +358,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
 
     // 收集個股歷史（供折線圖累計族群均漲幅）
     // hist5d 已在上方解析（build預埋優先 > 盤中fallback）
-    if(hist5d&&hist5d.length>=2&&p5close!=null&&p5close>0){{
+    if(hist5d&&hist5d.length>=2&&hist5d[0]&&hist5d[0].c>0){{
       stat.history5d.push(hist5d);
     }}
 
@@ -370,7 +411,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       if (q && q.volume_lots != null && isFinite(+q.volume_lots)) {{
         _totalVolToday += +q.volume_lots;
       }}
-      const av = parseFloat(row.dataset.avgVol20);
+      let av = parseFloat(row.dataset.avgVol20);
+      const qAvg = q && q.avg_vol20!=null && isFinite(+q.avg_vol20) ? +q.avg_vol20 : null;
+      if(!isFinite(av) && qAvg!=null) av = qAvg;
       if (isFinite(av) && av > 0) {{
         _totalAvgVol20 += av;
         _avgVol20Count++;
@@ -641,11 +684,14 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     if(ge&&ginfo){{
       const gr=ginfo.grade;
       const sfx=GRADE_SUFFIX[gr]||"";
-      // 大字顯眼：等級 + 說明文字
+      const vrVal = _isIntraday ? ginfo.volRatioAdj : ginfo.volRatio;
+      const vrTag = _isIntraday ? "*" : "";
+      const vrSmall = vrVal!=null ? `<span class="heat-vr">量比 ${{vrVal.toFixed(2)}}x${{vrTag}}</span>` : `<span class="heat-vr">量比 --</span>`;
+      // 大字顯眼：等級 + 說明文字 + 量比
       ge.innerHTML=`<span style="font-size:16px;font-weight:900;color:${{GRADE_COLOR[gr]}};
         background:${{GRADE_BG[gr]}};border:1px solid ${{GRADE_COLOR[gr]}}44;
         border-radius:5px;padding:2px 7px;letter-spacing:0.04em;">
-        ${{gr}}</span>${{sfx?`<span style="font-size:10px;color:${{GRADE_COLOR[gr]}};margin-left:4px;opacity:0.85">${{sfx}}</span>`:""}}`; 
+        ${{gr}}</span>${{sfx?`<span style="font-size:10px;color:${{GRADE_COLOR[gr]}};margin-left:4px;opacity:0.85">${{sfx}}</span>`:""}}${{vrSmall}}`; 
     }}
   }});
 
@@ -772,6 +818,10 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
   const chartEl=document.getElementById("rotation-chart");
   if(chartEl){{
     const groupLines=[];
+    const marketPcts = (MARKET_HISTORY_5D && MARKET_HISTORY_5D.length>=2 && MARKET_HISTORY_5D[0].c>0)
+      ? MARKET_HISTORY_5D.map(h => (h && h.c!=null) ? (h.c/MARKET_HISTORY_5D[0].c-1)*100 : null)
+      : [];
+    const hasMarketBase = marketPcts.length>=2;
     groupStats.forEach((stat,group)=>{{
       if(!stat.count||!stat.history5d.length)return;
       const allHists=stat.history5d;
@@ -784,8 +834,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         const vals=allHists.filter(h=>h.length>i&&h[0].c>0).map(h=>(h[i].c/h[0].c-1)*100);
         dailyPcts.push(vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null);
       }}
-      const points=labels.map((d,i)=>({{d,pct:dailyPcts[i]}}));
-      const finalPct=dailyPcts[dailyPcts.length-1]??0;
+      const relPcts=dailyPcts.map((v,i)=>(v!=null&&marketPcts[i]!=null)?v-marketPcts[i]:v);
+      const points=labels.map((d,i)=>({{d,pct:relPcts[i],rawPct:dailyPcts[i],marketPct:marketPcts[i]}}));
+      const finalPct=relPcts[relPcts.length-1]??0;
       const gi=groupGrades.get(group)||{{}};
       groupLines.push({{
         group, shortName:group.split(" / ")[0],
@@ -799,7 +850,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
     if(!groupLines.length){{
       chartEl.innerHTML='<div style="color:#3d5470;padding:24px;font-size:12px;font-style:italic">歷史資料尚未載入，請確認 build 腳本已成功執行並安裝 yfinance</div>';
     }}else{{
-      // 依終點漲幅排序（高到低）
+      // 依終點相對大盤漲幅排序（高到低）
       groupLines.sort((a,b)=>b.finalPct-a.finalPct);
 
       // Y 軸範圍
@@ -808,7 +859,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         if(p.pct!=null){{yMin=Math.min(yMin,p.pct);yMax=Math.max(yMax,p.pct);}}
       }}));
       const yRange=yMax-yMin||1;
-      const yPad=Math.max(1,yRange*0.18);
+      const yPad=Math.max(2.5,yRange*0.32);
       yMin-=yPad; yMax+=yPad;
 
       // 畫布尺寸（留足夠左邊給Y軸，右邊給標籤）
@@ -889,7 +940,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           if(rawY!=null){{
             const ly=clampY(rawY);
             const sign=line.finalPct>0?"+":"";
-            const pctStr=sign+line.finalPct.toFixed(1)+"%";
+            const pctStr=(hasMarketBase?"相對 ":"")+sign+line.finalPct.toFixed(1)+"%";
             const gradeC=GRADE_COLOR[line.grade]||line.color;
 
             // 端點 dot
@@ -1042,7 +1093,16 @@ body { margin:0!important; }
 }
 
 /* 熱力格 grade 覆寫：讓 [A] 等文字更大更顯眼（已在 JS innerHTML 處理，這裡補 flex） */
-.heat-grade { display:flex; align-items:center; gap:4px; margin-top:6px; }
+.heat-grade { display:flex; align-items:center; gap:4px; margin-top:6px; flex-wrap:wrap; }
+.heat-vr {
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;
+  color:#9fb6d3;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:5px;
+  padding:2px 5px;
+}
 
 /* ── 族群輪動圖 ────────────────────────────────────────────────────────── */
 .rotation-chart-wrap {
@@ -1195,8 +1255,8 @@ body { margin:0!important; }
     # 折線圖區塊
     chart_html = (
         '<div class="rotation-chart-wrap">'
-        '<div class="chart-label">📈 族群輪動時序圖'
-        '<span class="chart-sub">5日累計漲幅趨勢 · 粗線=前4強族群 · 右側標示族群名與等級</span></div>'
+        '<div class="chart-label">📈 5日相對大盤輪動'
+        '<span class="chart-sub">Y軸=族群5日累計漲幅 - 加權指數5日累計漲幅 · 粗線=前4強族群</span></div>'
         '<div id="rotation-chart"><div style="color:#3d5470;font-size:12px;padding:24px;font-style:italic">計算中…</div></div>'
         "</div>"
     )
