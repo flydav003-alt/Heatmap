@@ -273,7 +273,7 @@ class StockRow:
     avg_vol20:   float | None       = field(default=None)   # 過去20日平均成交張數
     p5_close:    float | None       = field(default=None)   # 5日前收盤價
     p20_high:    float | None       = field(default=None)   # 過去20日最高收盤價
-    # history_5d: 過去5個交易日收盤價序列 [{d:"MM/DD", c:float}, ...]
+    # history_5d: 過去10個交易日收盤價序列 [{d:"MM/DD", c:float}, ...]
     # 供盤中 JS 折線圖使用；預埋在 data-history-5d JSON 屬性中
     history_5d:  list[dict] | None  = field(default=None)
 
@@ -446,9 +446,9 @@ def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict]:
             vol_tail  = volume.tail(20)
             avg_vol20 = float(vol_tail.mean() / 1000) if len(vol_tail) >= 5 else None
 
-            # p5_close: 5 個交易日前的收盤價（iloc[-6] = 跳過今日後第5根）
-            if len(close) >= 6:
-                p5_close = float(close.iloc[-6])
+            # p5_close: 10 個交易日前的收盤價（iloc[-11] = 跳過今日後第10根）
+            if len(close) >= 11:
+                p5_close = float(close.iloc[-11])
             elif len(close) >= 2:
                 p5_close = float(close.iloc[0])
             else:
@@ -458,9 +458,9 @@ def fetch_historical_attrs(all_codes: list[str]) -> dict[str, dict]:
             close_tail = close.tail(20)
             p20_high   = float(close_tail.max()) if len(close_tail) >= 1 else None
 
-            # history_5d: 最近 5 個交易日收盤序列（供 JS 折線圖）
+            # history_5d: 最近 10 個交易日收盤序列（供 JS 折線圖）
             history_5d: list[dict] = []
-            for ts, v in close.tail(5).items():
+            for ts, v in close.tail(10).items():
                 try:
                     d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[5:10]
                     history_5d.append({"d": d, "c": round(float(v), 2)})
