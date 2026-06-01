@@ -98,8 +98,8 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
             vol_lots   = vol_shares / 1000 if vol_shares else None
             vol_tail = volume.tail(20)
             avg_vol20 = float(vol_tail.mean() / 1000) if len(vol_tail) >= 5 else None
-            if len(close) >= 6:
-                p5_close = float(close.iloc[-6])
+            if len(close) >= 11:
+                p5_close = float(close.iloc[-11])
             elif len(close) >= 2:
                 p5_close = float(close.iloc[0])
             else:
@@ -107,9 +107,9 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
             close_tail = close.tail(20)
             p20_high = float(close_tail.max()) if len(close_tail) >= 1 else None
 
-            # 5日收盤序列（供折線圖）: [{date, close}, ...]
+            # 10日收盤序列（供折線圖）: [{date, close}, ...]
             history_5d = []
-            close_tail = close.tail(5)
+            close_tail = close.tail(10)
             for ts, v in close_tail.items():
                 try:
                     d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[:10]
@@ -143,7 +143,7 @@ def fetch_all_quotes(symbols: tuple[tuple[str, str], ...]) -> dict[str, Any]:
                 df = raw
             close = df["Close"].dropna()
             history_5d = []
-            for ts, v in close.tail(5).items():
+            for ts, v in close.tail(10).items():
                 d = ts.strftime("%m/%d") if hasattr(ts, "strftime") else str(ts)[:10]
                 history_5d.append({"d": d, "c": round(float(v), 2)})
             return history_5d
@@ -341,7 +341,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       sum:0,count:0,volume:0,upCount:0,totalCount:0,
       sumAvgVol20:0,cntVol20:0,sumPrice:0,cntPrice:0,
       sumP5close:0,cntP5:0,sumP20high:0,cntP20:0,
-      history5d:[],   // 族群每日均漲幅序列 (5日)
+      history5d:[],   // 族群每日均漲幅序列 (10日)
     }});
     const stat=groupStats.get(group);
 
@@ -1277,8 +1277,8 @@ body { margin:0!important; }
     # 折線圖區塊
     chart_html = (
         '<div class="rotation-chart-wrap">'
-        '<div class="chart-label">📈 5日相對大盤輪動'
-        '<span class="chart-sub">Y軸=族群5日累計漲幅 - 加權指數5日累計漲幅 · 粗線=前4強族群</span></div>'
+        '<div class="chart-label">📈 10日相對大盤輪動'
+        '<span class="chart-sub">Y軸=族群10日累計漲幅 - 加權指數10日累計漲幅 · 粗線=前4強族群</span></div>'
         '<div id="rotation-chart"><div style="color:#3d5470;font-size:12px;padding:24px;font-style:italic">計算中…</div></div>'
         "</div>"
     )
@@ -1377,7 +1377,7 @@ def main() -> None:
         st.error("HTML 裡沒有找到任何 data-code，靜態檔案可能有問題。")
         st.stop()
 
-    with st.spinner(f"正在批次抓取 {len(symbols)} 檔即時報價及5日歷史…"):
+    with st.spinner(f"正在批次抓取 {len(symbols)} 檔即時報價及10日歷史…"):
         payload = fetch_all_quotes(symbols)
 
     if payload["fetched_count"] == 0:
