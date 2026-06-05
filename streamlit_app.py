@@ -875,6 +875,11 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       // 依終點相對大盤漲幅排序（高到低）
       groupLines.sort((a,b)=>b.finalPct-a.finalPct);
 
+      // 大盤排名插入：算大盤最終相對表現（0%，因為是基準）
+      const marketFinalPct = 0;
+      let marketRank = groupLines.findIndex(l=>l.finalPct < marketFinalPct);
+      if(marketRank === -1) marketRank = groupLines.length;
+
       // Y 軸範圍
       let yMin=0,yMax=0;
       groupLines.forEach(l=>l.points.forEach(p=>{{
@@ -884,8 +889,8 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       const yPad=Math.max(2.5,yRange*0.32);
       yMin-=yPad; yMax+=yPad;
 
-      // 畫布尺寸（留足夠左邊給Y軸，右邊給標籤）
-      const W=980, H=280, PL=46, PR=130, PT=20, PB=36;
+      // 畫布尺寸：右側改成 panel，SVG 不再內嵌標籤
+      const W=820, H=280, PL=46, PR=10, PT=20, PB=36;
       const cW=W-PL-PR, cH=H-PT-PB;
       const nDays=groupLines[0].points.length;
       const xS=i=>(nDays<2?cW/2:i*(cW/(nDays-1)));
@@ -903,39 +908,26 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           stroke="${{isZero?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.05)"}}"
           stroke-width="${{isZero?1.5:1}}"
           ${{isZero?'stroke-dasharray="none"':'stroke-dasharray="3,4"'}}/>`;
-        // Y 軸標籤
         const sign=val>0?"+":"";
-        yTickLabels+=`<text x="-8" y="${{y.toFixed(1)+4}}" fill="${{isZero?"rgba(255,255,255,0.3)":val>0?"rgba(255,104,128,0.6)":"rgba(0,210,110,0.6)"}}"
+        yTickLabels+=`<text x="-8" y="${{(+y.toFixed(1)+4)}}" fill="${{isZero?"rgba(255,255,255,0.3)":val>0?"rgba(255,104,128,0.6)":"rgba(0,210,110,0.6)"}}"
           font-size="9" text-anchor="end" font-family="IBM Plex Mono,monospace">${{sign+val.toFixed(1)}}%</text>`;
       }}
 
-      // 零線填色（漲區淡紅 / 跌區淡綠）
       const y0=yS(0)??cH/2;
       const upZone  =`<rect x="0" y="0" width="${{cW}}" height="${{y0.toFixed(1)}}" fill="rgba(255,45,84,0.03)"/>`;
       const downZone=`<rect x="0" y="${{y0.toFixed(1)}}" width="${{cW}}" height="${{(cH-y0).toFixed(1)}}" fill="rgba(0,210,110,0.03)"/>`;
 
-      // X 軸日期
       let xLabels="";
       groupLines[0].points.forEach((p,i)=>{{
         xLabels+=`<text x="${{xS(i).toFixed(1)}}" y="${{cH+24}}" fill="rgba(122,155,187,0.7)"
           font-size="10" text-anchor="middle" font-family="IBM Plex Mono,monospace">${{p.d}}</text>`;
       }});
 
-      // ── 折線 ───────────────────────────────────────────────────────────
-      // 先畫淡線（後排），再畫亮線（前排），讓重要線在最上層
+      // ── 折線：全部都畫，前4強亮（sw=2.5/opacity=1），其他淡（sw=1/opacity=0.35）
+      // 同時準備 hover 互動資料
       const TOP_N=4;
-      let pathsBg="", pathsFg="", dotsFg="", labelsFg="";
-
-      // 右側 label 防重疊：記錄已用 Y 位置
-      const usedY=[];
-      const clampY=(y,minGap=13)=>{{
-        let adj=y;
-        for(const used of usedY){{
-          if(Math.abs(adj-used)<minGap) adj=used+minGap*(adj>=used?1:-1);
-        }}
-        usedY.push(adj);
-        return adj;
-      }};
+      let pathsAll="";
+      const lineMetaArr=[]; // 供 JS hover 用
 
       groupLines.forEach((line,li)=>{{
         const isTop=li<TOP_N;
@@ -945,81 +937,283 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         if(pts.length<2)return;
 
         const pathD="M"+pts.join("L");
-        const opacity=isTop?1:0.28;
-        const sw=isTop?2.5:1;
+        const opacity=isTop?1:0.35;
+        const sw=isTop?2.5:1.2;
 
-        const pathEl=`<path d="${{pathD}}" fill="none" stroke="${{line.color}}"
+        // data-li 用於 hover 識別
+        pathsAll+=`<path d="${{pathD}}" fill="none" stroke="${{line.color}}"
           stroke-width="${{sw}}" stroke-opacity="${{opacity}}"
-          stroke-linejoin="round" stroke-linecap="round"/>`;
+          stroke-linejoin="round" stroke-linecap="round"
+          class="rot-line" data-li="${{li}}"
+          style="cursor:pointer;transition:stroke-opacity .15s,stroke-width .15s"/>`;
 
-        if(isTop) pathsFg+=pathEl;
-        else       pathsBg+=pathEl;
-
-        // 前 TOP_N 條加端點 + 右側標籤
+        // 前4強端點 dot
         if(isTop){{
-          const lastP=line.points[line.points.length-1];
-          const rawY=yS(lastP.pct);
+          const lastPt=line.points[line.points.length-1];
+          const rawY=yS(lastPt.pct);
           if(rawY!=null){{
-            const ly=clampY(rawY);
-            const sign=line.finalPct>0?"+":"";
-            const pctStr=(hasMarketBase?"相對 ":"")+sign+line.finalPct.toFixed(1)+"%";
-            const gradeC=GRADE_COLOR[line.grade]||line.color;
-
-            // 端點 dot
-            dotsFg+=`<circle cx="${{xS(nDays-1).toFixed(1)}}" cy="${{rawY.toFixed(1)}}"
-              r="4" fill="${{line.color}}" stroke="#04080f" stroke-width="1.5"/>`;
-
-            // 連接端點到標籤的引導線
-            if(Math.abs(ly-rawY)>3){{
-              dotsFg+=`<line x1="${{xS(nDays-1)+5}}" y1="${{rawY.toFixed(1)}}"
-                x2="${{xS(nDays-1)+14}}" y2="${{ly.toFixed(1)}}"
-                stroke="${{line.color}}" stroke-width="1" stroke-opacity="0.4"/>`;
-            }}
-
-            // 族群名 + 漲幅 + 等級 badge
-            labelsFg+=`
-              <text x="${{xS(nDays-1)+18}}" y="${{(ly-3).toFixed(1)}}"
-                fill="${{line.color}}" font-size="10.5" font-weight="700"
-                font-family="DM Sans,sans-serif">${{line.shortName}}</text>
-              <text x="${{xS(nDays-1)+18}}" y="${{(ly+9).toFixed(1)}}"
-                fill="${{gradeC}}" font-size="9.5"
-                font-family="IBM Plex Mono,monospace">${{pctStr}} [${{line.grade}}]</text>`;
+            pathsAll+=`<circle cx="${{xS(nDays-1).toFixed(1)}}" cy="${{rawY.toFixed(1)}}"
+              r="4" fill="${{line.color}}" stroke="#04080f" stroke-width="1.5"
+              class="rot-dot" data-li="${{li}}" style="cursor:pointer"/>`;
           }}
+        }}
+
+        // 記錄每條線的 y 值序列和 meta（供 hover 計算最近點）
+        lineMetaArr.push({{
+          li, group:line.group, shortName:line.shortName,
+          color:line.color, grade:line.grade,
+          finalPct:line.finalPct,
+          ys: line.points.map((p,i)=>yS(p.pct)),
+          isTop,
+        }});
+      }});
+
+      // ── 組裝 SVG + 右側 Panel ──────────────────────────────────────────
+      // 右側 panel 顯示前8強 + 大盤插入
+      const TOP_PANEL=8;
+      let panelRows="";
+      let insertedMarket=false;
+      for(let ri=0;ri<Math.min(groupLines.length+1,TOP_PANEL+1+(marketRank<=TOP_PANEL?0:1));ri++){{
+        // 在正確位置插入大盤行
+        if(!insertedMarket && ri===marketRank){{
+          insertedMarket=true;
+          panelRows+=`
+            <div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+              <span style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);flex-shrink:0"></span>
+              <span style="flex:1;font-size:11px;color:rgba(255,255,255,0.45);font-style:italic">── 加權指數</span>
+              <span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.35)">±0.0%</span>
+            </div>`;
+        }}
+        if(ri>=groupLines.length)break;
+        const l=groupLines[ri];
+        if(ri>=TOP_PANEL+(marketRank<=ri?1:0))break;
+        const sign=l.finalPct>0?"+":"";
+        const pctStr=sign+l.finalPct.toFixed(1)+"%";
+        const gradeC=GRADE_COLOR[l.grade]||l.color;
+        const rank=ri+1+(ri>=marketRank?1:0);
+        panelRows+=`
+          <div class="rot-panel-row" data-li="${{ri}}"
+            style="display:flex;align-items:center;gap:6px;padding:3px 2px;border-radius:4px;cursor:pointer;transition:background .12s">
+            <span style="width:8px;height:8px;border-radius:50%;background:${{l.color}};flex-shrink:0"></span>
+            <span style="flex:1;font-size:11px;color:#c8daf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${{l.shortName}}</span>
+            <span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:${{l.finalPct>0?"#ff8096":"#00d26e"}}">${{pctStr}}</span>
+            <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:${{GRADE_BG[l.grade]||"rgba(61,84,112,0.15)"}};color:${{gradeC}};border:1px solid ${{gradeC}}44">${{l.grade}}</span>
+          </div>`;
+      }}
+      if(!insertedMarket){{
+        panelRows+=`
+          <div style="display:flex;align-items:center;gap:6px;padding:3px 0;margin-top:2px">
+            <span style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);flex-shrink:0"></span>
+            <span style="flex:1;font-size:11px;color:rgba(255,255,255,0.45);font-style:italic">── 加權指數</span>
+            <span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.35)">±0.0%</span>
+          </div>`;
+      }}
+
+      // tooltip div（絕對定位，初始隱藏）
+      const tooltipId=`rot-tip-${{Date.now()}}`;
+
+      chartEl.style.position="relative";
+      chartEl.innerHTML=`
+      <div style="display:flex;gap:0;align-items:flex-start">
+        <div style="flex:1;min-width:0;position:relative">
+          <svg id="rot-svg" viewBox="0 0 ${{W}} ${{H}}" width="100%" style="display:block;overflow:visible"
+               xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <clipPath id="chartClip">
+                <rect x="0" y="0" width="${{cW}}" height="${{cH}}"/>
+              </clipPath>
+            </defs>
+            <g transform="translate(${{PL}},${{PT}})">
+              ${{upZone}}${{downZone}}
+              ${{gridLines}}
+              <g clip-path="url(#chartClip)">${{pathsAll}}</g>
+              ${{xLabels}}
+              ${{yTickLabels}}
+              <line x1="0" y1="${{cH}}" x2="${{cW}}" y2="${{cH}}" stroke="rgba(255,255,255,0.06)"/>
+              <line x1="0" y1="0" x2="0" y2="${{cH}}" stroke="rgba(255,255,255,0.06)"/>
+            </g>
+          </svg>
+          <!-- hover tooltip -->
+          <div id="${{tooltipId}}" style="
+            display:none;position:absolute;pointer-events:none;
+            background:rgba(4,8,15,0.92);border:1px solid rgba(255,255,255,0.15);
+            border-radius:8px;padding:8px 12px;min-width:140px;z-index:99;
+            box-shadow:0 4px 20px rgba(0,0,0,0.6)">
+          </div>
+        </div>
+        <!-- 右側排名 Panel -->
+        <div style="width:156px;flex-shrink:0;padding:4px 0 4px 12px;border-left:1px solid rgba(255,255,255,0.07);margin-left:8px">
+          <div style="font-size:9px;letter-spacing:.1em;color:#3d5470;margin-bottom:6px;text-transform:uppercase">族群排名（相對大盤）</div>
+          <div id="rot-panel-list">${{panelRows}}</div>
+        </div>
+      </div>`;
+
+      // ── hover / click 互動邏輯 ─────────────────────────────────────────
+      const svgEl=chartEl.querySelector('#rot-svg');
+      const tipEl=chartEl.querySelector(`#${{tooltipId}}`);
+      const svgWrap=chartEl.querySelector('div[style*="flex:1"]');
+
+      // 紀錄當前 hover/click 狀態
+      let activeIdx=null;
+      let clickLocked=false;
+
+      function highlightLine(li){{
+        svgEl.querySelectorAll('.rot-line').forEach(p=>{{
+          const pli=+p.dataset.li;
+          const isTop=lineMetaArr[pli]&&lineMetaArr[pli].isTop;
+          if(pli===li){{
+            p.style.strokeOpacity='1';
+            p.style.strokeWidth=isTop?'3':'2.2';
+          }}else{{
+            p.style.strokeOpacity='0.12';
+            p.style.strokeWidth=isTop?'2.5':'1.2';
+          }}
+        }});
+        // panel row 高亮
+        chartEl.querySelectorAll('.rot-panel-row').forEach(r=>{{
+          r.style.background=+r.dataset.li===li?'rgba(255,255,255,0.06)':'';
+        }});
+      }}
+
+      function resetLines(){{
+        svgEl.querySelectorAll('.rot-line').forEach(p=>{{
+          const pli=+p.dataset.li;
+          const isTop=lineMetaArr[pli]&&lineMetaArr[pli].isTop;
+          p.style.strokeOpacity=isTop?'1':'0.35';
+          p.style.strokeWidth=isTop?'2.5':'1.2';
+        }});
+        chartEl.querySelectorAll('.rot-panel-row').forEach(r=>r.style.background='');
+      }}
+
+      function showTip(li, ex, ey){{
+        const meta=lineMetaArr[li];
+        if(!meta)return;
+        const sign=meta.finalPct>0?"+":"";
+        const gradeC=GRADE_COLOR[meta.grade]||meta.color;
+        tipEl.innerHTML=`
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${{meta.color}};flex-shrink:0"></span>
+            <span style="font-size:12px;font-weight:700;color:#e8f4ff">${{meta.shortName}}</span>
+          </div>
+          <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:${{meta.finalPct>0?"#ff8096":"#00d26e"}};margin-bottom:2px">
+            相對大盤 ${{sign}}${{meta.finalPct.toFixed(2)}}%
+          </div>
+          <div style="font-size:10px;padding:1px 5px;border-radius:3px;display:inline-block;
+            background:${{GRADE_BG[meta.grade]||"rgba(61,84,112,0.15)"}};
+            color:${{gradeC}};border:1px solid ${{gradeC}}44">
+            ${{meta.grade}}級 ${{meta.group}}
+          </div>`;
+        // 定位：靠近滑鼠但不超出
+        const wrapRect=svgWrap.getBoundingClientRect();
+        const tipW=160, tipH=80;
+        let tx=ex+14, ty=ey-10;
+        if(tx+tipW>wrapRect.width) tx=ex-tipW-10;
+        if(ty+tipH>wrapRect.height) ty=ey-tipH-10;
+        tipEl.style.left=Math.max(0,tx)+'px';
+        tipEl.style.top=Math.max(0,ty)+'px';
+        tipEl.style.display='block';
+        tipEl.style.borderColor=meta.color+'66';
+      }}
+
+      function hideTip(){{
+        tipEl.style.display='none';
+      }}
+
+      // 找最近的線（以 path 的像素距離近似，用 y 軸距離判斷）
+      function findNearestLine(mx, my, svgRect){{
+        // 把滑鼠座標轉換成 SVG 內部座標
+        const svgW=svgRect.width, svgH=svgRect.height;
+        const vbW=W, vbH=H;
+        const scaleX=vbW/svgW, scaleY=vbH/svgH;
+        const svgX=(mx-svgRect.left)*scaleX - PL;
+        const svgY=(my-svgRect.top)*scaleY - PT;
+
+        // 找最近的 x 日期索引
+        const step=nDays<2?1:cW/(nDays-1);
+        let xi=Math.round(svgX/step);
+        xi=Math.max(0,Math.min(nDays-1,xi));
+
+        let minDist=Infinity, nearLi=-1;
+        lineMetaArr.forEach(meta=>{{
+          const py=meta.ys[xi];
+          if(py==null)return;
+          const dist=Math.abs(svgY-py);
+          if(dist<minDist){{minDist=dist;nearLi=meta.li;}}
+        }});
+        return {{li:nearLi, dist:minDist}};
+      }}
+
+      // mousemove on SVG wrapper
+      svgWrap.addEventListener('mousemove',e=>{{
+        if(clickLocked)return;
+        const svgRect=svgEl.getBoundingClientRect();
+        const wrapRect=svgWrap.getBoundingClientRect();
+        const {{li,dist}}=findNearestLine(e.clientX,e.clientY,svgRect);
+        if(li>=0 && dist<30){{
+          if(activeIdx!==li){{
+            activeIdx=li;
+            highlightLine(li);
+          }}
+          showTip(li, e.clientX-wrapRect.left, e.clientY-wrapRect.top);
+        }}else{{
+          if(activeIdx!==null){{activeIdx=null;resetLines();}}
+          hideTip();
         }}
       }});
 
-      // ── 組裝 SVG ───────────────────────────────────────────────────────
-      chartEl.innerHTML=`
-      <svg viewBox="0 0 ${{W}} ${{H}}" width="100%" style="display:block;overflow:visible"
-           xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <clipPath id="chartClip">
-            <rect x="0" y="0" width="${{cW}}" height="${{cH}}"/>
-          </clipPath>
-        </defs>
-        <g transform="translate(${{PL}},${{PT}})">
-          <!-- 背景漲跌區 -->
-          ${{upZone}}${{downZone}}
-          <!-- 網格 -->
-          ${{gridLines}}
-          <!-- 淡線（後排） -->
-          <g clip-path="url(#chartClip)">${{pathsBg}}</g>
-          <!-- 亮線（前排） -->
-          <g clip-path="url(#chartClip)">${{pathsFg}}</g>
-          <!-- 端點 -->
-          ${{dotsFg}}
-          <!-- X 軸標籤 -->
-          ${{xLabels}}
-          <!-- Y 軸標籤 -->
-          ${{yTickLabels}}
-          <!-- X 軸底線 -->
-          <line x1="0" y1="${{cH}}" x2="${{cW}}" y2="${{cH}}" stroke="rgba(255,255,255,0.06)"/>
-          <!-- Y 軸左線 -->
-          <line x1="0" y1="0" x2="0" y2="${{cH}}" stroke="rgba(255,255,255,0.06)"/>
-        </g>
-        <!-- 右側標籤（不受 clip） -->
-        <g transform="translate(${{PL}},${{PT}})">${{labelsFg}}</g>
-      </svg>`;
+      svgWrap.addEventListener('mouseleave',e=>{{
+        if(clickLocked)return;
+        activeIdx=null;
+        resetLines();
+        hideTip();
+      }});
+
+      svgWrap.addEventListener('click',e=>{{
+        const svgRect=svgEl.getBoundingClientRect();
+        const wrapRect=svgWrap.getBoundingClientRect();
+        const {{li,dist}}=findNearestLine(e.clientX,e.clientY,svgRect);
+        if(li>=0 && dist<30){{
+          if(clickLocked && activeIdx===li){{
+            // 再點同一條：解鎖
+            clickLocked=false; activeIdx=null;
+            resetLines(); hideTip();
+          }}else{{
+            clickLocked=true; activeIdx=li;
+            highlightLine(li);
+            showTip(li, e.clientX-wrapRect.left, e.clientY-wrapRect.top);
+          }}
+        }}else{{
+          clickLocked=false; activeIdx=null;
+          resetLines(); hideTip();
+        }}
+      }});
+
+      // panel row hover & click
+      chartEl.querySelectorAll('.rot-panel-row').forEach(row=>{{
+        const li=+row.dataset.li;
+        row.addEventListener('mouseenter',()=>{{
+          if(clickLocked)return;
+          activeIdx=li; highlightLine(li);
+          // tooltip 顯示在 panel 旁
+          const meta=lineMetaArr[li];
+          if(meta){{
+            const wrapRect=svgWrap.getBoundingClientRect();
+            const rowRect=row.getBoundingClientRect();
+            showTip(li, wrapRect.width-180, rowRect.top-wrapRect.top+chartEl.getBoundingClientRect().top-chartEl.getBoundingClientRect().top);
+          }}
+        }});
+        row.addEventListener('mouseleave',()=>{{
+          if(clickLocked)return;
+          activeIdx=null; resetLines(); hideTip();
+        }});
+        row.addEventListener('click',()=>{{
+          if(clickLocked && activeIdx===li){{
+            clickLocked=false; activeIdx=null; resetLines(); hideTip();
+          }}else{{
+            clickLocked=true; activeIdx=li; highlightLine(li);
+          }}
+        }});
+      }});
     }}
   }}
 
