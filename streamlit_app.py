@@ -890,7 +890,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       yMin-=yPad; yMax+=yPad;
 
       // 畫布尺寸：右側改成 panel，SVG 不再內嵌標籤
-      const W=820, H=280, PL=46, PR=10, PT=20, PB=36;
+      const W=820, H=373, PL=46, PR=10, PT=20, PB=36;
       const cW=W-PL-PR, cH=H-PT-PB;
       const nDays=groupLines[0].points.length;
       const xS=i=>(nDays<2?cW/2:i*(cW/(nDays-1)));
