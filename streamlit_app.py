@@ -886,11 +886,11 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         if(p.pct!=null){{yMin=Math.min(yMin,p.pct);yMax=Math.max(yMax,p.pct);}}
       }}));
       const yRange=yMax-yMin||1;
-      const yPad=Math.max(2.5,yRange*0.32);
+      const yPad=Math.max(1.5,yRange*0.10);
       yMin-=yPad; yMax+=yPad;
 
       // 畫布尺寸：右側改成 panel，SVG 不再內嵌標籤
-      const W=820, H=373, PL=46, PR=10, PT=20, PB=36;
+      const W=820, H=280, PL=46, PR=10, PT=20, PB=36;
       const cW=W-PL-PR, cH=H-PT-PB;
       const nDays=groupLines[0].points.length;
       const xS=i=>(nDays<2?cW/2:i*(cW/(nDays-1)));
