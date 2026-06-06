@@ -969,11 +969,11 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       }});
 
       // ── 組裝 SVG + 右側 Panel ──────────────────────────────────────────
-      // 右側 panel 顯示前8強 + 大盤插入
-      const TOP_PANEL=8;
+      // 右側 panel 顯示全部族群 + 大盤插入（捲動）
+      const TOP_PANEL=groupLines.length; // 顯示全部族群
       let panelRows="";
       let insertedMarket=false;
-      for(let ri=0;ri<Math.min(groupLines.length+1,TOP_PANEL+1+(marketRank<=TOP_PANEL?0:1));ri++){{
+      for(let ri=0;ri<groupLines.length+1;ri++){{
         // 在正確位置插入大盤行
         if(!insertedMarket && ri===marketRank){{
           insertedMarket=true;
@@ -986,7 +986,6 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         }}
         if(ri>=groupLines.length)break;
         const l=groupLines[ri];
-        if(ri>=TOP_PANEL+(marketRank<=ri?1:0))break;
         const sign=l.finalPct>0?"+":"";
         const pctStr=sign+l.finalPct.toFixed(1)+"%";
         const gradeC=GRADE_COLOR[l.grade]||l.color;
@@ -1044,7 +1043,7 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
         <!-- 右側排名 Panel -->
         <div style="width:156px;flex-shrink:0;padding:4px 0 4px 12px;border-left:1px solid rgba(255,255,255,0.07);margin-left:8px">
           <div style="font-size:9px;letter-spacing:.1em;color:#3d5470;margin-bottom:6px;text-transform:uppercase">族群排名（相對大盤）</div>
-          <div id="rot-panel-list">${{panelRows}}</div>
+          <div id="rot-panel-list" style="max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3d5470 transparent">${{panelRows}}</div>
         </div>
       </div>`;
 
