@@ -1180,6 +1180,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
             clickLocked=true; activeIdx=li;
             highlightLine(li);
             showTip(li, e.clientX-wrapRect.left, e.clientY-wrapRect.top);
+            // ── 捲動到對應族群 ──
+            const meta=lineMetaArr[li];
+            if(meta) jumpToGroup(meta.group);
           }}
         }}else{{
           clickLocked=false; activeIdx=null;
@@ -1210,6 +1213,9 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
             clickLocked=false; activeIdx=null; resetLines(); hideTip();
           }}else{{
             clickLocked=true; activeIdx=li; highlightLine(li);
+            // ── 捲動到對應族群 ──
+            const meta=lineMetaArr[li];
+            if(meta) jumpToGroup(meta.group);
           }}
         }});
       }});
