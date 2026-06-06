@@ -1035,9 +1035,10 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           <!-- hover tooltip -->
           <div id="${{tooltipId}}" style="
             display:none;position:absolute;pointer-events:none;
-            background:rgba(4,8,15,0.92);border:1px solid rgba(255,255,255,0.15);
+            background:rgba(4,8,15,0.45);border:1px solid rgba(255,255,255,0.18);
+            backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
             border-radius:8px;padding:8px 12px;min-width:140px;z-index:99;
-            box-shadow:0 4px 20px rgba(0,0,0,0.6)">
+            box-shadow:0 4px 20px rgba(0,0,0,0.35)">
           </div>
         </div>
         <!-- 右側排名 Panel -->
@@ -1144,7 +1145,6 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
 
       // mousemove on SVG wrapper
       svgWrap.addEventListener('mousemove',e=>{{
-        if(clickLocked)return;
         const svgRect=svgEl.getBoundingClientRect();
         const wrapRect=svgWrap.getBoundingClientRect();
         const {{li,dist}}=findNearestLine(e.clientX,e.clientY,svgRect);
@@ -1155,8 +1155,13 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           }}
           showTip(li, e.clientX-wrapRect.left, e.clientY-wrapRect.top);
         }}else{{
-          if(activeIdx!==null){{activeIdx=null;resetLines();}}
-          hideTip();
+          // 若有 click 鎖定，離開線條範圍時恢復鎖定狀態
+          if(clickLocked){{
+            hideTip();
+          }}else{{
+            if(activeIdx!==null){{activeIdx=null;resetLines();}}
+            hideTip();
+          }}
         }}
       }});
 
