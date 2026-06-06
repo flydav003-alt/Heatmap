@@ -1194,9 +1194,8 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
       chartEl.querySelectorAll('.rot-panel-row').forEach(row=>{{
         const li=+row.dataset.li;
         row.addEventListener('mouseenter',()=>{{
-          if(clickLocked)return;
+          // hover 永遠高亮，不被 clickLocked 擋
           activeIdx=li; highlightLine(li);
-          // tooltip 顯示在 panel 旁
           const meta=lineMetaArr[li];
           if(meta){{
             const wrapRect=svgWrap.getBoundingClientRect();
@@ -1205,11 +1204,16 @@ def inject_live_script(base_html: str, payload: dict[str, Any],
           }}
         }});
         row.addEventListener('mouseleave',()=>{{
-          if(clickLocked)return;
-          activeIdx=null; resetLines(); hideTip();
+          // 若有 click 鎖定，離開後恢復鎖定狀態的高亮；否則全部重置
+          if(clickLocked){{
+            highlightLine(activeIdx); hideTip();
+          }}else{{
+            activeIdx=null; resetLines(); hideTip();
+          }}
         }});
         row.addEventListener('click',()=>{{
           if(clickLocked && activeIdx===li){{
+            // 再點同一條：解鎖
             clickLocked=false; activeIdx=null; resetLines(); hideTip();
           }}else{{
             clickLocked=true; activeIdx=li; highlightLine(li);
